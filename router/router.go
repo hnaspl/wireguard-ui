@@ -106,6 +106,11 @@ func New(tmplDir fs.FS, extraData map[string]interface{}, secret [64]byte) *echo
 		log.Fatal(err)
 	}
 
+	tmplFirewallRulesString, err := util.StringFromEmbedFile(tmplDir, "firewall_rules.html")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	aboutPageString, err := util.StringFromEmbedFile(tmplDir, "about.html")
 	if err != nil {
 		log.Fatal(err)
@@ -124,6 +129,7 @@ func New(tmplDir fs.FS, extraData map[string]interface{}, secret [64]byte) *echo
 	templates["users_settings.html"] = template.Must(template.New("users_settings").Funcs(funcs).Parse(tmplBaseString + tmplUsersSettingsString))
 	templates["status.html"] = template.Must(template.New("status").Funcs(funcs).Parse(tmplBaseString + tmplStatusString))
 	templates["wake_on_lan_hosts.html"] = template.Must(template.New("wake_on_lan_hosts").Funcs(funcs).Parse(tmplBaseString + tmplWakeOnLanHostsString))
+	templates["firewall_rules.html"] = template.Must(template.New("firewall_rules").Funcs(funcs).Parse(tmplBaseString + tmplFirewallRulesString))
 	templates["about.html"] = template.Must(template.New("about").Funcs(funcs).Parse(tmplBaseString + aboutPageString))
 
 	lvl, err := util.ParseLogLevel(util.LookupEnvOrString(util.LogLevel, "INFO"))
