@@ -75,40 +75,20 @@ Global Settings
                             </div>
                             <hr>
                             <h5>PostUp/PostDown Script Configuration</h5>
+                            <p class="text-muted">Scripts are automatically generated with firewall rules integrated. Firewall rules from the UI always work.</p>
                             <div class="form-group">
-                                <div class="icheck-primary d-inline">
-                                    <input type="checkbox" id="enable_auto_gen_scripts" {{if .globalSettings.EnableAutoGenScripts}}checked{{end}}>
-                                    <label for="enable_auto_gen_scripts">
-                                        <strong>Auto-generate PostUp/PostDown scripts from firewall rules</strong>
-                                    </label>
-                                </div>
-                                <small class="form-text text-muted">When enabled, generates iptables-based scripts automatically. Integrates firewall rules from UI with site-to-site VPN configuration.</small>
-                            </div>
-                            <div class="form-group">
-                                <label for="post_up_script_path">PostUp Script Path (Optional)</label>
+                                <label for="post_up_script_path">PostUp Script Path</label>
                                 <input type="text" class="form-control" id="post_up_script_path"
-                                    name="post_up_script_path" placeholder="E.g. /etc/wireguard/postup.sh"
+                                    name="post_up_script_path" placeholder="/etc/wireguard/postup.sh"
                                     value="{{ .globalSettings.PostUpScriptPath }}">
-                                <small class="form-text text-muted">If auto-gen enabled and this is empty, will use /etc/wireguard/postup.sh</small>
+                                <small class="form-text text-muted">Path where PostUp script will be saved (default: /etc/wireguard/postup.sh)</small>
                             </div>
-                            <div class="form-group" id="post_down_path_group">
-                                <label for="post_down_script_path">PostDown Script Path (Optional)</label>
+                            <div class="form-group">
+                                <label for="post_down_script_path">PostDown Script Path</label>
                                 <input type="text" class="form-control" id="post_down_script_path"
-                                    name="post_down_script_path" placeholder="E.g. /etc/wireguard/postdown.sh"
+                                    name="post_down_script_path" placeholder="/etc/wireguard/postdown.sh"
                                     value="{{ .globalSettings.PostDownScriptPath }}">
-                                <small class="form-text text-muted">If auto-gen enabled and this is empty, will use /etc/wireguard/postdown.sh</small>
-                            </div>
-                            <div class="form-group" id="template_group" style="display: none;">
-                                <label for="post_up_template">PostUp Script Template (Advanced)</label>
-                                <textarea class="form-control" id="post_up_template" name="post_up_template"
-                                    rows="3" placeholder="E.g. iptables -A FORWARD -i %i -j ACCEPT">{{ .globalSettings.PostUpTemplate }}</textarea>
-                                <small class="form-text text-muted">Manual template - only used if auto-gen is disabled and no script path provided</small>
-                            </div>
-                            <div class="form-group" id="template_down_group" style="display: none;">
-                                <label for="post_down_template">PostDown Script Template (Advanced)</label>
-                                <textarea class="form-control" id="post_down_template" name="post_down_template"
-                                    rows="3" placeholder="E.g. iptables -D FORWARD -i %i -j ACCEPT">{{ .globalSettings.PostDownTemplate }}</textarea>
-                                <small class="form-text text-muted">Manual template - only used if auto-gen is disabled and no script path provided</small>
+                                <small class="form-text text-muted">Path where PostDown script will be saved (default: /etc/wireguard/postdown.sh)</small>
                             </div>
                             <hr>
                             <h5>Environment Variables for Scripts</h5>
@@ -174,10 +154,11 @@ Global Settings
                             <dt>7. Wireguard Config File Path</dt>
                             <dd>The path of your Wireguard server config file. Please make sure the parent directory
                                 exists and is writable.</dd>
-                            <dt>8. Auto-generate Scripts</dt>
-                            <dd><strong>Recommended for site-to-site VPNs:</strong> When enabled, automatically generates PostUp/PostDown scripts with proper iptables rules for site-to-site connectivity.</dd>
-                            <dd>Includes: MSS clamping, no-NAT for site-to-site, protected IP blocking, firewall rules from UI, and internet masquerading.</dd>
-                            <dd>Scripts are saved to specified paths or defaults to <code>/etc/wireguard/postup.sh</code> and <code>/etc/wireguard/postdown.sh</code>.</dd>
+                            <dt>8. PostUp/PostDown Script Configuration</dt>
+                            <dd><strong>Scripts are always automatically generated</strong> with proper iptables rules for site-to-site connectivity and firewall rules from the UI.</dd>
+                            <dd>Includes: MSS clamping, no-NAT for site-to-site, protected IP blocking, UI firewall rules, and internet masquerading.</dd>
+                            <dd>Scripts are saved to specified paths (defaults: <code>/etc/wireguard/postup.sh</code> and <code>/etc/wireguard/postdown.sh</code>).</dd>
+                            <dd><strong>Firewall rules from the UI always work</strong> - they are integrated into the generated scripts automatically.</dd>
                             <dt>9. Environment Variables</dt>
                             <dd><strong>WG_SUBNETS:</strong> Automatically calculated from Wireguard Server interface addresses. Used in scripts to identify VPN traffic.</dd>
                             <dd><strong>LAN_ALL:</strong> Your local network ranges. Defines which networks can communicate with WireGuard peers.</dd>
@@ -231,7 +212,6 @@ Global Settings
             const firewall_mark = $("#firewall_mark").val();
             const table = $("#table").val();
             const config_file_path = $("#config_file_path").val();
-            const enable_auto_gen_scripts = $("#enable_auto_gen_scripts").is(':checked');
             const post_up_script_path = $("#post_up_script_path").val();
             const post_up_template = $("#post_up_template").val();
             const post_down_script_path = $("#post_down_script_path").val();
@@ -247,7 +227,6 @@ Global Settings
                 "firewall_mark": firewall_mark, 
                 "table": table, 
                 "config_file_path": config_file_path, 
-                "enable_auto_gen_scripts": enable_auto_gen_scripts,
                 "post_up_script_path": post_up_script_path,
                 "post_up_template": post_up_template, 
                 "post_down_script_path": post_down_script_path,
@@ -274,22 +253,6 @@ Global Settings
                 }
             });
         }
-
-        // Toggle template visibility based on auto-gen checkbox
-        $(document).ready(function() {
-            function updateTemplateVisibility() {
-                if ($("#enable_auto_gen_scripts").is(':checked')) {
-                    $("#template_group").hide();
-                    $("#template_down_group").hide();
-                } else {
-                    $("#template_group").show();
-                    $("#template_down_group").show();
-                }
-            }
-            
-            $("#enable_auto_gen_scripts").change(updateTemplateVisibility);
-            updateTemplateVisibility();
-        });
 
         function updateEndpointSuggestionIP() {
             $.getJSON("{{.basePath}}/api/machine-ips", null, function(data) {

@@ -1181,15 +1181,14 @@ func ApplyServerConfig(db store.IStore, tmplDir fs.FS) echo.HandlerFunc {
 			})
 		}
 
-		// Generate PostUp/PostDown scripts if auto-generation is enabled
-		if settings.EnableAutoGenScripts {
-			err = util.GenerateAndSaveScripts(settings, &server, firewallRules, clients)
-			if err != nil {
-				log.Error("Cannot generate scripts: ", err)
-				return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
-					false, fmt.Sprintf("Cannot generate scripts: %v", err),
-				})
-			}
+		// Always generate PostUp/PostDown scripts with firewall rules integrated
+		// Scripts are saved to configured paths (defaults: /etc/wireguard/postup.sh, postdown.sh)
+		err = util.GenerateAndSaveScripts(settings, &server, firewallRules, clients)
+		if err != nil {
+			log.Error("Cannot generate scripts: ", err)
+			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
+				false, fmt.Sprintf("Cannot generate scripts: %v", err),
+			})
 		}
 
 		err = util.UpdateHashes(db)
