@@ -134,7 +134,7 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 }
 
 // GeneratePostUpScript generates a complete PostUp script matching the user's pattern
-func GeneratePostUpScript(globalSettings model.GlobalSetting, firewallRules []model.FirewallRule, clients []model.ClientData, interfaceName string) string {
+func GeneratePostUpScript(globalSettings model.GlobalSetting, wgSubnets string, firewallRules []model.FirewallRule, clients []model.ClientData, interfaceName string) string {
 	var script strings.Builder
 
 	// Start with environment variable setup (matching user's pattern)
@@ -148,7 +148,7 @@ func GeneratePostUpScript(globalSettings model.GlobalSetting, firewallRules []mo
 	script.WriteString(fmt.Sprintf("WG_IF=\"%s\"\n", wgIf))
 	
 	// Set defaults matching user's script
-	wgSubnets := globalSettings.WgSubnets
+	// wgSubnets is now calculated from server interface addresses
 	if wgSubnets == "" {
 		wgSubnets = "10.100.100.0/24"
 	}
@@ -274,7 +274,7 @@ func GeneratePostUpScript(globalSettings model.GlobalSetting, firewallRules []mo
 }
 
 // GeneratePostDownScript generates a complete PostDown script matching the user's pattern
-func GeneratePostDownScript(globalSettings model.GlobalSetting, firewallRules []model.FirewallRule, clients []model.ClientData, interfaceName string) string {
+func GeneratePostDownScript(globalSettings model.GlobalSetting, wgSubnets string, firewallRules []model.FirewallRule, clients []model.ClientData, interfaceName string) string {
 	var script strings.Builder
 
 	wgIf := interfaceName
@@ -287,7 +287,7 @@ func GeneratePostDownScript(globalSettings model.GlobalSetting, firewallRules []
 	script.WriteString(fmt.Sprintf("WG_IF=\"%s\"\n", wgIf))
 	
 	// Set defaults matching user's script
-	wgSubnets := globalSettings.WgSubnets
+	// wgSubnets is now calculated from server interface addresses
 	if wgSubnets == "" {
 		wgSubnets = "10.100.100.0/24"
 	}
@@ -376,7 +376,7 @@ func GeneratePostDownScript(globalSettings model.GlobalSetting, firewallRules []
 }
 
 // GenerateAndSaveScripts generates and saves PostUp/PostDown scripts to disk
-func GenerateAndSaveScripts(globalSettings model.GlobalSetting, firewallRules []model.FirewallRule, clients []model.ClientData) error {
+func GenerateAndSaveScripts(globalSettings model.GlobalSetting, server *model.Server, firewallRules []model.FirewallRule, clients []model.ClientData) error {
 // Determine script paths - use configured paths or defaults
 postUpPath := globalSettings.PostUpScriptPath
 if postUpPath == "" {
@@ -410,9 +410,15 @@ configDir = "/etc/wireguard"
 postDownPath = configDir + "/postdown.sh"
 }
 
+// Calculate WG_SUBNETS from server interface addresses
+wgSubnets := ""
+if server != nil && server.Interface != nil && len(server.Interface.Addresses) > 0 {
+	wgSubnets = strings.Join(server.Interface.Addresses, " ")
+}
+
 // Generate scripts
-postUpScript := GeneratePostUpScript(globalSettings, firewallRules, clients, "wg0")
-postDownScript := GeneratePostDownScript(globalSettings, firewallRules, clients, "wg0")
+postUpScript := GeneratePostUpScript(globalSettings, wgSubnets, firewallRules, clients, "wg0")
+postDownScript := GeneratePostDownScript(globalSettings, wgSubnets, firewallRules, clients, "wg0")
 
 // Write PostUp script
 err := os.WriteFile(postUpPath, []byte(postUpScript), 0755)

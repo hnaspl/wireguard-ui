@@ -108,10 +108,11 @@ These environment variables control the automatic generation of PostUp/PostDown 
 |----------------------------------|--------------------------------------------------------------------------------------------------|----------------------|
 | `WGUI_POST_UP_SCRIPT_PATH`       | Path where auto-generated PostUp script will be saved                                            | `/etc/wireguard/postup.sh`   |
 | `WGUI_POST_DOWN_SCRIPT_PATH`     | Path where auto-generated PostDown script will be saved                                          | `/etc/wireguard/postdown.sh` |
-| `WGUI_WG_SUBNETS`                | WireGuard network ranges (space-separated). Used in scripts to identify VPN traffic              | `10.100.100.0/24`    |
 | `WGUI_LAN_ALL`                   | Local network ranges. Defines which networks can communicate with WireGuard peers                | `192.168.0.0/16`     |
 | `WGUI_LAN_PROTECT`               | Protected IPs that WireGuard clients cannot access (e.g., router admin interface)                | `192.168.4.1/32`     |
 | `WGUI_MASQ_OIF_PATTERN`          | Network interface pattern for NAT/masquerading to internet (e.g., `eth+` matches eth0, eth1)    | `eth+`               |
+
+**Note:** `WG_SUBNETS` is automatically calculated from `WGUI_SERVER_INTERFACE_ADDRESSES` and does not need to be configured separately.
 
 ### Docker only
 
@@ -205,7 +206,7 @@ When **"Auto-generate PostUp/PostDown scripts from firewall rules"** is enabled 
 
 Configure these in **Global Settings**:
 
-- **WG_SUBNETS**: Your WireGuard network ranges (e.g., `10.100.100.0/24`)
+- **WG_SUBNETS**: Automatically calculated from your Wireguard Server interface addresses (no manual configuration needed)
 - **LAN_ALL**: Your local network ranges (e.g., `192.168.0.0/16`)
 - **LAN_PROTECT**: IPs to protect from WireGuard access (e.g., `192.168.4.1/32` for router admin)
 - **MASQ_OIF_PATTERN**: Interface pattern for internet NAT (e.g., `eth+`)

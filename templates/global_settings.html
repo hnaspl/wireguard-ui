@@ -112,14 +112,7 @@ Global Settings
                             </div>
                             <hr>
                             <h5>Environment Variables for Scripts</h5>
-                            <small class="text-muted">These will be available to your PostUp/PostDown scripts</small>
-                            <div class="form-group">
-                                <label for="wg_subnets">WG_SUBNETS</label>
-                                <input type="text" class="form-control" id="wg_subnets"
-                                    name="wg_subnets" placeholder="E.g. 10.100.100.0/24"
-                                    value="{{ .globalSettings.WgSubnets }}">
-                                <small class="form-text text-muted">WireGuard subnet(s), space-separated for multiple</small>
-                            </div>
+                            <small class="text-muted">These will be available to your PostUp/PostDown scripts. WG_SUBNETS is automatically calculated from Wireguard Server interface addresses.</small>
                             <div class="form-group">
                                 <label for="lan_all">LAN_ALL</label>
                                 <input type="text" class="form-control" id="lan_all"
@@ -186,7 +179,7 @@ Global Settings
                             <dd>Includes: MSS clamping, no-NAT for site-to-site, protected IP blocking, firewall rules from UI, and internet masquerading.</dd>
                             <dd>Scripts are saved to specified paths or defaults to <code>/etc/wireguard/postup.sh</code> and <code>/etc/wireguard/postdown.sh</code>.</dd>
                             <dt>9. Environment Variables</dt>
-                            <dd><strong>WG_SUBNETS:</strong> WireGuard network ranges. Used in scripts to identify VPN traffic.</dd>
+                            <dd><strong>WG_SUBNETS:</strong> Automatically calculated from Wireguard Server interface addresses. Used in scripts to identify VPN traffic.</dd>
                             <dd><strong>LAN_ALL:</strong> Your local network ranges. Defines which networks can communicate with WireGuard peers.</dd>
                             <dd><strong>LAN_PROTECT:</strong> Protected IPs that WireGuard clients cannot access (e.g., router admin interface).</dd>
                             <dd><strong>MASQ_OIF_PATTERN:</strong> Interface pattern for NAT/masquerading to internet (e.g., <code>eth+</code> matches eth0, eth1, etc.).</dd>
@@ -243,7 +236,6 @@ Global Settings
             const post_up_template = $("#post_up_template").val();
             const post_down_script_path = $("#post_down_script_path").val();
             const post_down_template = $("#post_down_template").val();
-            const wg_subnets = $("#wg_subnets").val();
             const lan_all = $("#lan_all").val();
             const lan_protect = $("#lan_protect").val();
             const masq_oif_pattern = $("#masq_oif_pattern").val();
@@ -260,7 +252,6 @@ Global Settings
                 "post_up_template": post_up_template, 
                 "post_down_script_path": post_down_script_path,
                 "post_down_template": post_down_template,
-                "wg_subnets": wg_subnets,
                 "lan_all": lan_all,
                 "lan_protect": lan_protect,
                 "masq_oif_pattern": masq_oif_pattern
