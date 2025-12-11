@@ -10,6 +10,9 @@ A web user interface to manage your WireGuard setup.
 - Authentication
 - Manage extra client information (name, email, etc.)
 - Retrieve client config using QR code / file / email / Telegram
+- **Site-to-Site VPN** - Connect multiple WireGuard networks together
+- **Firewall Rules Management** - Per-client access control with whitelist/blacklist support
+- **Auto-generated PostUp/PostDown Scripts** - Automatic iptables rule generation for site-to-site setups
 
 ![wireguard-ui 0.3.7](https://user-images.githubusercontent.com/37958026/177041280-e3e7ca16-d4cf-4e95-9920-68af15e780dd.png)
 
@@ -97,6 +100,19 @@ These environment variables are used to set the defaults used in `New Client` di
 | `WGUI_DEFAULT_CLIENT_USE_SERVER_DNS`        | Boolean value [`0`, `f`, `F`, `false`, `False`, `FALSE`, `1`, `t`, `T`, `true`, `True`, `TRUE`] | `true`      |
 | `WGUI_DEFAULT_CLIENT_ENABLE_AFTER_CREATION` | Boolean value [`0`, `f`, `F`, `false`, `False`, `FALSE`, `1`, `t`, `T`, `true`, `True`, `TRUE`] | `true`      |
 
+### PostUp/PostDown Script Auto-generation
+
+These environment variables control the automatic generation of PostUp/PostDown scripts for site-to-site VPN configurations.
+
+| Variable                         | Description                                                                                      | Default              |
+|----------------------------------|--------------------------------------------------------------------------------------------------|----------------------|
+| `WGUI_POST_UP_SCRIPT_PATH`       | Path where auto-generated PostUp script will be saved                                            | `/etc/wireguard/postup.sh`   |
+| `WGUI_POST_DOWN_SCRIPT_PATH`     | Path where auto-generated PostDown script will be saved                                          | `/etc/wireguard/postdown.sh` |
+| `WGUI_WG_SUBNETS`                | WireGuard network ranges (space-separated). Used in scripts to identify VPN traffic              | `10.100.100.0/24`    |
+| `WGUI_LAN_ALL`                   | Local network ranges. Defines which networks can communicate with WireGuard peers                | `192.168.0.0/16`     |
+| `WGUI_LAN_PROTECT`               | Protected IPs that WireGuard clients cannot access (e.g., router admin interface)                | `192.168.4.1/32`     |
+| `WGUI_MASQ_OIF_PATTERN`          | Network interface pattern for NAT/masquerading to internet (e.g., `eth+` matches eth0, eth1)    | `eth+`               |
+
 ### Docker only
 
 These environment variables only apply to the docker container.
@@ -105,6 +121,123 @@ These environment variables only apply to the docker container.
 |-----------------------|---------------------------------------------------------------|---------|
 | `WGUI_MANAGE_START`   | Start/stop WireGuard when the container is started/stopped    | `false` |
 | `WGUI_MANAGE_RESTART` | Auto restart WireGuard when we Apply Config changes in the UI | `false` |
+
+## Site-to-Site VPN Configuration
+
+WireGuard-UI supports site-to-site VPN connections, allowing you to connect multiple WireGuard networks together.
+
+### Setting Up a Site-to-Site Connection
+
+1. Navigate to **Wireguard Clients** and click **New Client**
+2. Enter a name for the remote site (e.g., "Remote Office" or "wg_friend")
+3. Check the **"Site-to-Site Connection"** checkbox
+4. Configure the peer:
+   - **Endpoint**: Enter the remote site's public IP and port (e.g., `vpn.remotesite.com:51820`)
+   - **Allowed IPs**: Enter the remote network ranges you want to access (e.g., `10.0.0.0/24`)
+   - **Public Key**: Enter the remote site's public key
+   - **PresharedKey** (optional): For additional security
+   - **Persistent Keepalive**: Recommended for site-to-site (e.g., `25`)
+5. Click **Submit**
+
+### How It Works
+
+When you enable **Site-to-Site Connection**:
+- The client becomes a peer in your server's WireGuard configuration
+- Your server will connect TO the remote site (not the other way around)
+- Traffic is routed bidirectionally between your network and the remote network
+- No NAT is applied to site-to-site traffic (preserving real IP addresses)
+- MSS clamping is automatically configured to handle MTU issues
+
+### Example Use Case
+
+You have two sites:
+- **Site A**: Your main office with network `192.168.1.0/24`
+- **Site B**: Remote location with network `10.0.0.0/24`
+
+On Site A's WireGuard-UI:
+1. Create a site-to-site client for "Site B"
+2. Set Endpoint to Site B's public IP
+3. Set AllowedIPs to `10.0.0.0/24`
+4. Add firewall rules (optional) to restrict which services Site B can access on your network
+
+## Firewall Rules Management
+
+Control which clients can access specific parts of your network with fine-grained firewall rules.
+
+### Access Control Logic
+
+- **Clients WITH firewall rules**: Only the traffic specified in firewall rules is allowed. All other traffic is blocked.
+- **Clients WITHOUT firewall rules**: Full network access (default allow), respecting only the protected IP restrictions.
+
+This enables flexible access control where you can:
+- Give trusted clients full access (no firewall rules)
+- Restrict site-to-site peers to specific services
+- Limit mobile clients to only what they need
+
+### Managing Firewall Rules
+
+1. Navigate to **Settings** → **Firewall Rules**
+2. Click **Add Rule** to create a new rule
+3. Configure the rule:
+   - **Client**: Select which client this rule applies to
+   - **Allowed IP**: The destination IP or network (e.g., `192.168.1.10` or `192.168.1.0/24`)
+   - **Allowed Port**: Port or port range (e.g., `443`, `80:443`, or `any`)
+   - **Protocol**: TCP, UDP, or any
+   - **Description**: Note about what this rule allows
+   - **Enabled**: Toggle to enable/disable the rule
+4. Click **Save**
+
+### Auto-generated Scripts
+
+When **"Auto-generate PostUp/PostDown scripts from firewall rules"** is enabled in Global Settings:
+
+1. PostUp/PostDown scripts are automatically generated when you click **Apply Config**
+2. Scripts include:
+   - Base iptables rules for WireGuard traffic
+   - Your firewall rules from the UI
+   - MSS clamping for MTU handling
+   - No-NAT configuration for site-to-site VPNs
+   - Protected IP blocking (e.g., router admin interface)
+   - Internet masquerading for external traffic
+3. Scripts are saved to the configured paths (default: `/etc/wireguard/postup.sh` and `/etc/wireguard/postdown.sh`)
+
+### Environment Variables for Scripts
+
+Configure these in **Global Settings**:
+
+- **WG_SUBNETS**: Your WireGuard network ranges (e.g., `10.100.100.0/24`)
+- **LAN_ALL**: Your local network ranges (e.g., `192.168.0.0/16`)
+- **LAN_PROTECT**: IPs to protect from WireGuard access (e.g., `192.168.4.1/32` for router admin)
+- **MASQ_OIF_PATTERN**: Interface pattern for internet NAT (e.g., `eth+`)
+
+These variables are automatically injected into the generated scripts.
+
+### Example Scenarios
+
+#### Scenario 1: Restricted Site-to-Site Connection
+```
+Client: "wg_friend" (site-to-site enabled)
+Firewall Rules:
+  - Allow 192.168.1.10 port 443 (HTTPS to web server)
+  - Allow 192.168.1.20 port 22 (SSH to backup server)
+Result: Friend can only access those two services, all other traffic blocked
+```
+
+#### Scenario 2: Mobile User with Limited Access
+```
+Client: "employee_phone"
+Firewall Rules:
+  - Allow 192.168.1.0/24 port 443 (Web services)
+  - Allow 192.168.2.5 port 3389 (RDP to their workstation)
+Result: Employee can access web services and their workstation only
+```
+
+#### Scenario 3: Trusted Admin
+```
+Client: "admin_laptop"
+Firewall Rules: (none)
+Result: Full network access except protected IPs
+```
 
 ## Auto restart WireGuard daemon
 
