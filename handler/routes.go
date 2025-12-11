@@ -1154,6 +1154,13 @@ func ApplyServerConfig(db store.IStore, tmplDir fs.FS) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{false, "Cannot get global settings"})
 		}
 
+		// Get firewall rules for script generation
+		firewallRules, err := db.GetFirewallRules()
+		if err != nil {
+			log.Warn("Cannot get firewall rules (will proceed without them): ", err)
+			firewallRules = []model.FirewallRule{}
+		}
+
 		// Write config file
 		err = util.WriteWireGuardServerConfig(tmplDir, server, clients, users, settings)
 		if err != nil {
@@ -1161,6 +1168,17 @@ func ApplyServerConfig(db store.IStore, tmplDir fs.FS) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
 				false, fmt.Sprintf("Cannot apply server config: %v", err),
 			})
+		}
+
+		// Generate PostUp/PostDown scripts if auto-generation is enabled
+		if settings.EnableAutoGenScripts {
+			err = util.GenerateAndSaveScripts(settings, firewallRules, clients)
+			if err != nil {
+				log.Error("Cannot generate scripts: ", err)
+				return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
+					false, fmt.Sprintf("Cannot generate scripts: %v", err),
+				})
+			}
 		}
 
 		err = util.UpdateHashes(db)

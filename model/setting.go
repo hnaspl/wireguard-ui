@@ -22,5 +22,6 @@ type GlobalSetting struct {
 	MasqOifPattern   string `json:"masq_oif_pattern"`     // e.g., "eth+"
 	PostUpScriptPath string `json:"post_up_script_path"`  // Path to external script
 	PostDownScriptPath string `json:"post_down_script_path"` // Path to external script
+	EnableAutoGenScripts bool `json:"enable_auto_gen_scripts"` // Auto-generate PostUp/PostDown from firewall rules
 	UpdatedAt        time.Time `json:"updated_at"`
 }
