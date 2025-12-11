@@ -27,4 +27,8 @@ type IStore interface {
 	GetPath() string
 	SaveHashes(hashes model.ClientServerHashes) error
 	GetHashes() (model.ClientServerHashes, error)
+	GetFirewallRules() ([]model.FirewallRule, error)
+	GetFirewallRule(id string) (model.FirewallRule, error)
+	SaveFirewallRule(rule model.FirewallRule) error
+	DeleteFirewallRule(id string) error
 }
