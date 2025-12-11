@@ -10,13 +10,16 @@ import (
 
 // GenerateFirewallRules generates iptables commands from UI firewall rules
 // These are inserted AFTER established/related and protected IP rules
-func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.ClientData, action string) string {
+// Returns: accept rules, drop rules for restricted clients, list of restricted client IPs
+func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.ClientData, action string) (string, string, []string) {
 	if len(firewallRules) == 0 {
-		return ""
+		return "", "", []string{}
 	}
 
-	var rules []string
+	var acceptRules []string
+	var dropRules []string
 	clientIPMap := make(map[string][]string)
+	clientsWithRules := make(map[string]bool) // Track which clients have firewall rules
 
 	// Build map of client ID to their allocated IPs
 	for _, clientData := range clients {
@@ -25,7 +28,7 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 		}
 	}
 
-	// Generate rules for each firewall rule
+	// Generate ACCEPT rules for each firewall rule
 	for _, rule := range firewallRules {
 		if !rule.Enabled {
 			continue
@@ -35,6 +38,9 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 		if !exists || len(clientIPs) == 0 {
 			continue
 		}
+
+		// Mark this client as having firewall rules
+		clientsWithRules[rule.ClientID] = true
 
 		// For each client IP, generate appropriate iptables rule
 		for _, clientIP := range clientIPs {
@@ -65,25 +71,66 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 
 			ruleCmd += " -m conntrack --ctstate NEW -j ACCEPT"
 
-			rules = append(rules, ruleCmd)
+			acceptRules = append(acceptRules, ruleCmd)
 		}
 	}
 
-	// Add check to avoid duplicates when using -I (insert) mode
-	var rulesWithChecks []string
-	for _, rule := range rules {
+	// Generate DROP rules for clients that have firewall rules configured
+	// This enforces "if firewall rules exist, only allow what's specified"
+	var restrictedIPs []string
+	for clientID := range clientsWithRules {
+		clientIPs, exists := clientIPMap[clientID]
+		if !exists || len(clientIPs) == 0 {
+			continue
+		}
+
+		for _, clientIP := range clientIPs {
+			// Strip CIDR notation if present
+			sourceIP := strings.Split(clientIP, "/")[0]
+			restrictedIPs = append(restrictedIPs, sourceIP)
+
+			var cmd string
+			if action == "add" {
+				cmd = "$IPT -A FORWARD"
+			} else {
+				cmd = "$IPT -D FORWARD"
+			}
+
+			// DROP any other NEW connections from this client
+			dropCmd := fmt.Sprintf("%s -i \"$WG_IF\" -s %s -m conntrack --ctstate NEW -j DROP", cmd, sourceIP)
+			dropRules = append(dropRules, dropCmd)
+		}
+	}
+
+	// Add check to avoid duplicates when using -I (insert) mode for ACCEPT rules
+	var acceptRulesWithChecks []string
+	for _, rule := range acceptRules {
 		if action == "add" {
 			// Replace -I with -C for check, then add the rule only if check fails
 			checkRule := strings.Replace(rule, "$IPT -I FORWARD 1", "$IPT -C FORWARD", 1)
 			safeRule := fmt.Sprintf("%s 2>/dev/null || \\\n%s", checkRule, rule)
-			rulesWithChecks = append(rulesWithChecks, safeRule)
+			acceptRulesWithChecks = append(acceptRulesWithChecks, safeRule)
 		} else {
 			// For delete, add || true to ignore errors if rule doesn't exist
-			rulesWithChecks = append(rulesWithChecks, rule+" 2>/dev/null || true")
+			acceptRulesWithChecks = append(acceptRulesWithChecks, rule+" 2>/dev/null || true")
 		}
 	}
 
-	return strings.Join(rulesWithChecks, "\n")
+	// Add check for DROP rules
+	var dropRulesWithChecks []string
+	for _, rule := range dropRules {
+		if action == "add" {
+			// Replace -A with -C for check, then add the rule only if check fails
+			checkRule := strings.Replace(rule, "$IPT -A FORWARD", "$IPT -C FORWARD", 1)
+			safeRule := fmt.Sprintf("%s 2>/dev/null || \\\n%s", checkRule, rule)
+			dropRulesWithChecks = append(dropRulesWithChecks, safeRule)
+		} else {
+			// For delete, add || true to ignore errors if rule doesn't exist
+			dropRulesWithChecks = append(dropRulesWithChecks, rule+" 2>/dev/null || true")
+		}
+	}
+
+	return strings.Join(acceptRulesWithChecks, "\n"), strings.Join(dropRulesWithChecks, "\n"), restrictedIPs
 }
 
 // GeneratePostUpScript generates a complete PostUp script matching the user's pattern
@@ -164,9 +211,16 @@ func GeneratePostUpScript(globalSettings model.GlobalSetting, firewallRules []mo
 	// Add generated firewall rules from UI (these go after ESTABLISHED and PROTECT)
 	if len(firewallRules) > 0 {
 		script.WriteString("# --- FIREWALL RULES FROM UI ---\n")
-		iptablesRules := GenerateFirewallRules(firewallRules, clients, "add")
-		if iptablesRules != "" {
-			script.WriteString(iptablesRules)
+		acceptRules, dropRules, _ := GenerateFirewallRules(firewallRules, clients, "add")
+		if acceptRules != "" {
+			script.WriteString("# Allow specific traffic for clients with firewall rules\n")
+			script.WriteString(acceptRules)
+			script.WriteString("\n\n")
+		}
+		if dropRules != "" {
+			script.WriteString("# Drop all other NEW traffic from clients with firewall rules\n")
+			script.WriteString("# (Clients without firewall rules get broad access via rules below)\n")
+			script.WriteString(dropRules)
 			script.WriteString("\n\n")
 		}
 	}
@@ -277,9 +331,14 @@ func GeneratePostDownScript(globalSettings model.GlobalSetting, firewallRules []
 	// Remove generated firewall rules from UI
 	if len(firewallRules) > 0 {
 		script.WriteString("# Remove firewall rules from UI\n")
-		iptablesRules := GenerateFirewallRules(firewallRules, clients, "delete")
-		if iptablesRules != "" {
-			script.WriteString(iptablesRules)
+		acceptRules, dropRules, _ := GenerateFirewallRules(firewallRules, clients, "delete")
+		// Remove DROP rules first, then ACCEPT rules
+		if dropRules != "" {
+			script.WriteString(dropRules)
+			script.WriteString("\n")
+		}
+		if acceptRules != "" {
+			script.WriteString(acceptRules)
 			script.WriteString("\n\n")
 		}
 	}
