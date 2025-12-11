@@ -100,19 +100,22 @@ These environment variables are used to set the defaults used in `New Client` di
 | `WGUI_DEFAULT_CLIENT_USE_SERVER_DNS`        | Boolean value [`0`, `f`, `F`, `false`, `False`, `FALSE`, `1`, `t`, `T`, `true`, `True`, `TRUE`] | `true`      |
 | `WGUI_DEFAULT_CLIENT_ENABLE_AFTER_CREATION` | Boolean value [`0`, `f`, `F`, `false`, `False`, `FALSE`, `1`, `t`, `T`, `true`, `True`, `TRUE`] | `true`      |
 
-### PostUp/PostDown Script Auto-generation
+### PostUp/PostDown Scripts
 
-These environment variables control the automatic generation of PostUp/PostDown scripts for site-to-site VPN configurations.
+Scripts are **automatically generated** when you click "Apply Config". Firewall rules from the UI are always integrated into these scripts.
 
 | Variable                         | Description                                                                                      | Default              |
 |----------------------------------|--------------------------------------------------------------------------------------------------|----------------------|
-| `WGUI_POST_UP_SCRIPT_PATH`       | Path where auto-generated PostUp script will be saved                                            | `/etc/wireguard/postup.sh`   |
-| `WGUI_POST_DOWN_SCRIPT_PATH`     | Path where auto-generated PostDown script will be saved                                          | `/etc/wireguard/postdown.sh` |
+| `WGUI_POST_UP_SCRIPT_PATH`       | Path where PostUp script will be saved                                                           | `/etc/wireguard/postup.sh`   |
+| `WGUI_POST_DOWN_SCRIPT_PATH`     | Path where PostDown script will be saved                                                         | `/etc/wireguard/postdown.sh` |
 | `WGUI_LAN_ALL`                   | Local network ranges. Defines which networks can communicate with WireGuard peers                | `192.168.0.0/16`     |
 | `WGUI_LAN_PROTECT`               | Protected IPs that WireGuard clients cannot access (e.g., router admin interface)                | `192.168.4.1/32`     |
 | `WGUI_MASQ_OIF_PATTERN`          | Network interface pattern for NAT/masquerading to internet (e.g., `eth+` matches eth0, eth1)    | `eth+`               |
 
-**Note:** `WG_SUBNETS` is automatically calculated from `WGUI_SERVER_INTERFACE_ADDRESSES` and does not need to be configured separately.
+**Notes:**
+- `WG_SUBNETS` is automatically calculated from `WGUI_SERVER_INTERFACE_ADDRESSES` and does not need to be configured separately
+- Firewall rules configured in the UI are automatically integrated into the generated scripts
+- Scripts include: INPUT chain rules, FORWARD chain management, protected IP blocking, MSS clamping, no-NAT for site-to-site, and internet masquerading
 
 ### Docker only
 
@@ -188,19 +191,21 @@ This enables flexible access control where you can:
    - **Enabled**: Toggle to enable/disable the rule
 4. Click **Save**
 
-### Auto-generated Scripts
+### How Firewall Rules Work
 
-When **"Auto-generate PostUp/PostDown scripts from firewall rules"** is enabled in Global Settings:
+Firewall rules are **automatically integrated** into PostUp/PostDown scripts when you click **Apply Config**:
 
-1. PostUp/PostDown scripts are automatically generated when you click **Apply Config**
-2. Scripts include:
+1. Scripts are generated and saved to configured paths (default: `/etc/wireguard/postup.sh` and `/etc/wireguard/postdown.sh`)
+2. Generated scripts include:
    - Base iptables rules for WireGuard traffic
-   - Your firewall rules from the UI
+   - **Your firewall rules from the UI automatically injected**
    - MSS clamping for MTU handling
    - No-NAT configuration for site-to-site VPNs
    - Protected IP blocking (e.g., router admin interface)
    - Internet masquerading for external traffic
-3. Scripts are saved to the configured paths (default: `/etc/wireguard/postup.sh` and `/etc/wireguard/postdown.sh`)
+3. Firewall rules are enforced using iptables FORWARD chain rules
+
+**No configuration needed** - firewall rules always work once you apply config
 
 ### Environment Variables for Scripts
 
