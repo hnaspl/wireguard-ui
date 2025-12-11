@@ -899,6 +899,17 @@ func GlobalSettings(db store.IStore) echo.HandlerFunc {
 			log.Error("Cannot get global settings: ", err)
 		}
 
+		// Set sensible defaults if values are empty
+		if globalSettings.LanAll == "" {
+			globalSettings.LanAll = "192.168.0.0/16"
+		}
+		if globalSettings.LanProtect == "" {
+			globalSettings.LanProtect = "192.168.4.1/32"
+		}
+		if globalSettings.MasqOifPattern == "" {
+			globalSettings.MasqOifPattern = "eth+"
+		}
+
 		return c.Render(http.StatusOK, "global_settings.html", map[string]interface{}{
 			"baseData":       model.BaseData{Active: "global-settings", CurrentUser: currentUser(c), Admin: isAdmin(c)},
 			"globalSettings": globalSettings,

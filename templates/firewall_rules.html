@@ -202,9 +202,11 @@ Firewall Rules Management
             success: function (data) {
                 $('#n_client_id option').remove();
                 $('#e_client_id option').remove();
-                $.each(data, function(index, client) {
-                    $('#n_client_id').append($("<option></option>").attr("value", client.id).text(client.name));
-                    $('#e_client_id').append($("<option></option>").attr("value", client.id).text(client.name));
+                $.each(data, function(index, clientData) {
+                    if (clientData.Client) {
+                        $('#n_client_id').append($("<option></option>").attr("value", clientData.Client.id).text(clientData.Client.name));
+                        $('#e_client_id').append($("<option></option>").attr("value", clientData.Client.id).text(clientData.Client.name));
+                    }
                 });
             },
             error: function (jqXHR, exception) {
