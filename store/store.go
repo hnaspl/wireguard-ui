@@ -31,4 +31,11 @@ type IStore interface {
 	GetFirewallRule(id string) (model.FirewallRule, error)
 	SaveFirewallRule(rule model.FirewallRule) error
 	DeleteFirewallRule(id string) error
+	// Interface management methods
+	GetInterfaces() ([]model.Interface, error)
+	GetInterface(id string) (model.Interface, error)
+	SaveInterface(iface model.Interface) error
+	DeleteInterface(id string) error
+	GetClientsByInterface(interfaceID string, hasQRCode bool) ([]model.ClientData, error)
+	GetFirewallRulesByInterface(interfaceID string) ([]model.FirewallRule, error)
 }

@@ -187,6 +187,13 @@ func (o *JsonDB) Init() error {
 		}
 	}
 
+	// Run migration to multi-interface support
+	// This will create a default wg0 interface from existing server config
+	// and update all clients and firewall rules to reference it
+	if err := o.MigrateToMultiInterface(); err != nil {
+		return fmt.Errorf("failed to migrate to multi-interface support: %v", err)
+	}
+
 	return nil
 }
 
