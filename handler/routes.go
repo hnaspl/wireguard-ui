@@ -65,9 +65,18 @@ func Login(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Bad post data"})
 		}
 
-		username := data["username"].(string)
-		password := data["password"].(string)
-		rememberMe := data["rememberMe"].(bool)
+		// Safe type assertions with checks
+		username, ok := data["username"].(string)
+		if !ok || username == "" {
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Username is required"})
+		}
+		
+		password, ok := data["password"].(string)
+		if !ok || password == "" {
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Password is required"})
+		}
+		
+		rememberMe, _ := data["rememberMe"].(bool) // Default to false if not provided
 
 		if !usernameRegexp.MatchString(username) {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Please provide a valid username"})
