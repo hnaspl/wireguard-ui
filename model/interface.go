@@ -4,8 +4,8 @@ import (
 	"time"
 )
 
-// Interface model for managing multiple WireGuard interfaces
-type Interface struct {
+// WgInterface model for managing multiple WireGuard interfaces
+type WgInterface struct {
 	ID                 string    `json:"id"`                  // e.g., "wg0", "wg1", "wg_friend"
 	Name               string    `json:"name"`                // Human-readable name
 	Type               string    `json:"type"`                // "server" or "client"
@@ -24,15 +24,15 @@ type Interface struct {
 	Updated            time.Time `json:"updated"`
 
 	// For client-type interfaces (connecting to external servers)
-	PeerPublicKey         string `json:"peer_public_key,omitempty"`          // Remote server's public key
-	PeerPresharedKey      string `json:"peer_preshared_key,omitempty"`       // Optional preshared key
-	PeerEndpoint          string `json:"peer_endpoint,omitempty"`            // Remote server endpoint (host:port)
-	PeerAllowedIPs        []string `json:"peer_allowed_ips,omitempty"`       // Routes through this peer
-	PeerPersistentKeepalive int    `json:"peer_persistent_keepalive,omitempty"` // Keepalive interval
+	PeerPublicKey           string   `json:"peer_public_key,omitempty"`           // Remote server's public key
+	PeerPresharedKey        string   `json:"peer_preshared_key,omitempty"`        // Optional preshared key
+	PeerEndpoint            string   `json:"peer_endpoint,omitempty"`             // Remote server endpoint (host:port)
+	PeerAllowedIPs          []string `json:"peer_allowed_ips,omitempty"`          // Routes through this peer
+	PeerPersistentKeepalive int      `json:"peer_persistent_keepalive,omitempty"` // Keepalive interval
 }
 
-// InterfaceType constants
+// WgInterfaceType constants
 const (
-	InterfaceTypeServer = "server"
-	InterfaceTypeClient = "client"
+	WgInterfaceTypeServer = "server"
+	WgInterfaceTypeClient = "client"
 )

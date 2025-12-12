@@ -13,8 +13,8 @@ import (
 )
 
 // GetInterfaces retrieves all interfaces from the database
-func (o *JsonDB) GetInterfaces() ([]model.Interface, error) {
-	var interfaces []model.Interface
+func (o *JsonDB) GetInterfaces() ([]model.WgInterface, error) {
+	var interfaces []model.WgInterface
 	interfacesPath := path.Join(o.dbPath, "interfaces")
 	
 	// Create interfaces directory if it doesn't exist
@@ -31,7 +31,7 @@ func (o *JsonDB) GetInterfaces() ([]model.Interface, error) {
 	}
 	
 	for _, data := range results {
-		iface := model.Interface{}
+		iface := model.WgInterface{}
 		if err := json.Unmarshal(data, &iface); err != nil {
 			return interfaces, fmt.Errorf("cannot decode interface json structure: %v", err)
 		}
@@ -42,8 +42,8 @@ func (o *JsonDB) GetInterfaces() ([]model.Interface, error) {
 }
 
 // GetInterface retrieves a specific interface by ID
-func (o *JsonDB) GetInterface(id string) (model.Interface, error) {
-	iface := model.Interface{}
+func (o *JsonDB) GetInterface(id string) (model.WgInterface, error) {
+	iface := model.WgInterface{}
 	
 	if err := o.conn.Read("interfaces", id, &iface); err != nil {
 		return iface, err
@@ -53,7 +53,7 @@ func (o *JsonDB) GetInterface(id string) (model.Interface, error) {
 }
 
 // SaveInterface saves an interface to the database
-func (o *JsonDB) SaveInterface(iface model.Interface) error {
+func (o *JsonDB) SaveInterface(iface model.WgInterface) error {
 	// Calculate public key from private key if not set
 	if iface.PrivateKey != "" && iface.PublicKey == "" {
 		key, err := wgtypes.ParseKey(iface.PrivateKey)
@@ -139,10 +139,10 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 	}
 	
 	// Create default wg0 interface from server settings
-	defaultInterface := model.Interface{
+	defaultInterface := model.WgInterface{
 		ID:                 "wg0",
 		Name:               "Default Server",
-		Type:               model.InterfaceTypeServer,
+		Type:               model.WgInterfaceTypeServer,
 		InterfaceAddresses: server.Interface.Addresses,
 		PrivateKey:         server.KeyPair.PrivateKey,
 		PublicKey:          server.KeyPair.PublicKey,
