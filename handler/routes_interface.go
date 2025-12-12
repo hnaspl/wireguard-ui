@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -227,7 +228,22 @@ func DeleteInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
-		// Delete the interface
+		// Stop the interface if it's running
+		util.StopInterface(interfaceID)
+
+		// Delete the WireGuard config file
+		configPath := fmt.Sprintf("/etc/wireguard/%s.conf", interfaceID)
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			log.Warnf("Failed to remove config file %s: %v", configPath, err)
+		}
+
+		// Delete interface-specific PostUp/PostDown scripts
+		postUpPath := fmt.Sprintf("/etc/wireguard/%s-postup.sh", interfaceID)
+		postDownPath := fmt.Sprintf("/etc/wireguard/%s-postdown.sh", interfaceID)
+		os.Remove(postUpPath)   // Ignore errors - files may not exist
+		os.Remove(postDownPath) // Ignore errors - files may not exist
+
+		// Delete the interface from database
 		if err := db.DeleteInterface(interfaceID); err != nil {
 			log.Error("Cannot delete interface from database: ", err)
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
