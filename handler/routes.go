@@ -431,6 +431,28 @@ func NewClient(db store.IStore) echo.HandlerFunc {
 			}
 		}
 
+		// Assign to default interface if not specified
+		if client.InterfaceID == "" {
+			// Try to get the default interface
+			interfaces, err := db.GetInterfaces()
+			if err == nil && len(interfaces) > 0 {
+				// Find the default interface
+				for _, iface := range interfaces {
+					if iface.IsDefault {
+						client.InterfaceID = iface.ID
+						break
+					}
+				}
+				// If no default found, use the first interface
+				if client.InterfaceID == "" {
+					client.InterfaceID = interfaces[0].ID
+				}
+			} else {
+				// Fallback to wg0 for backward compatibility
+				client.InterfaceID = "wg0"
+			}
+		}
+
 		// read server information
 		server, err := db.GetServer()
 		if err != nil {
@@ -1148,8 +1170,40 @@ func SuggestIPAllocation(db store.IStore) echo.HandlerFunc {
 }
 
 // ApplyServerConfig handler to write config file and restart Wireguard server
+// This handles both legacy single-interface mode and new multi-interface mode
 func ApplyServerConfig(db store.IStore, tmplDir fs.FS) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		// Check if multi-interface mode is active by checking for interfaces
+		interfaces, err := db.GetInterfaces()
+		if err != nil {
+			log.Error("Cannot get interfaces: ", err)
+			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{false, "Cannot get interfaces"})
+		}
+
+		// Multi-interface mode: apply config for all enabled interfaces
+		if len(interfaces) > 0 {
+			log.Info("Applying configuration in multi-interface mode")
+			err = util.ApplyAllInterfacesConfig(db, tmplDir)
+			if err != nil {
+				log.Error("Cannot apply multi-interface config: ", err)
+				return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
+					false, fmt.Sprintf("Cannot apply multi-interface config: %v", err),
+				})
+			}
+
+			err = util.UpdateHashes(db)
+			if err != nil {
+				log.Error("Cannot update hashes: ", err)
+				return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
+					false, fmt.Sprintf("Cannot update hashes: %v", err),
+				})
+			}
+
+			return c.JSON(http.StatusOK, jsonHTTPResponse{true, "Applied configuration for all interfaces successfully"})
+		}
+
+		// Legacy mode: apply config for default wg0 interface using old method
+		log.Info("Applying configuration in legacy mode (no interfaces defined yet)")
 		server, err := db.GetServer()
 		if err != nil {
 			log.Error("Cannot get server config: ", err)

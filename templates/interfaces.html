@@ -1,0 +1,483 @@
+{{define "title"}}
+WireGuard Interfaces
+{{end}}
+{{define "top_css"}}
+<style>
+    .interface-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        background-color: #fff;
+    }
+    .interface-card.disabled {
+        opacity: 0.6;
+        background-color: #f8f9fa;
+    }
+    .interface-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    .interface-name {
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    .interface-badge {
+        font-size: 0.875rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .interface-info {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+    }
+    .interface-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+</style>
+{{end}}
+{{define "body.html"}}
+<section class="content-header">
+    <div class="container-fluid">
+        <div class="row mb-2">
+            <div class="col-sm-6">
+                <h1>WireGuard Interfaces</h1>
+            </div>
+            <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                    <li class="breadcrumb-item"><a href="{{.basePath}}">Home</a></li>
+                    <li class="breadcrumb-item active">Interfaces</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Manage WireGuard Interfaces</h3>
+                        <div class="card-tools">
+                            <button type="button" class="btn btn-primary btn-sm" onclick="showCreateInterfaceModal()">
+                                <i class="fas fa-plus"></i> Add Interface
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="interfaces-container">
+                            <div class="text-center">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <p>Loading interfaces...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Create/Edit Interface Modal -->
+<div class="modal fade" id="interfaceModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="interfaceModalTitle">Add Interface</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="interfaceForm">
+                    <div class="form-group">
+                        <label for="interface_id">Interface ID *</label>
+                        <input type="text" class="form-control" id="interface_id" name="id" required
+                               placeholder="e.g., wg1, wg2, wg_friend" pattern="[a-zA-Z0-9_]+"
+                               title="Only alphanumeric characters and underscores allowed">
+                        <small class="form-text text-muted">Unique identifier for this interface (e.g., wg1, wg2)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="interface_name">Name *</label>
+                        <input type="text" class="form-control" id="interface_name" name="name" required
+                               placeholder="e.g., Friend's VPN, Backup Server">
+                        <small class="form-text text-muted">Human-readable name for this interface</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="interface_type">Type *</label>
+                        <select class="form-control" id="interface_type" name="type" required onchange="toggleInterfaceTypeFields()">
+                            <option value="server">Server</option>
+                            <option value="client">Client</option>
+                        </select>
+                        <small class="form-text text-muted">Server: hosts clients | Client: connects to external server</small>
+                    </div>
+
+                    <!-- Server-type fields -->
+                    <div id="server-fields">
+                        <div class="form-group">
+                            <label for="interface_addresses">Interface Addresses *</label>
+                            <input type="text" class="form-control" id="interface_addresses" name="interface_addresses"
+                                   placeholder="e.g., 10.252.2.1/24">
+                            <small class="form-text text-muted">Comma-separated list of CIDR addresses</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="listen_port">Listen Port</label>
+                            <input type="number" class="form-control" id="listen_port" name="listen_port"
+                                   placeholder="51820" min="1" max="65535">
+                        </div>
+                    </div>
+
+                    <!-- Client-type fields -->
+                    <div id="client-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="client_addresses">Your IP Address *</label>
+                            <input type="text" class="form-control" id="client_addresses" name="client_addresses"
+                                   placeholder="e.g., 10.0.0.13/24,fd00:db8:0:abc::13/64">
+                            <small class="form-text text-muted">IP address(es) assigned to you by the remote server (comma-separated for IPv4 and IPv6)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="client_dns">DNS Servers</label>
+                            <input type="text" class="form-control" id="client_dns" name="dns"
+                                   placeholder="e.g., 10.0.0.1,64.6.64.6">
+                            <small class="form-text text-muted">DNS servers provided by remote server (comma-separated)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="client_mtu">MTU</label>
+                            <input type="number" class="form-control" id="client_mtu" name="mtu"
+                                   placeholder="1420" min="1280" max="1500">
+                            <small class="form-text text-muted">Maximum Transmission Unit (default: 1420)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="peer_endpoint">Remote Server Endpoint *</label>
+                            <input type="text" class="form-control" id="peer_endpoint" name="peer_endpoint"
+                                   placeholder="e.g., vpn.example.com:51820">
+                            <small class="form-text text-muted">Remote server's public address and port</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="peer_public_key">Remote Server Public Key *</label>
+                            <input type="text" class="form-control" id="peer_public_key" name="peer_public_key"
+                                   placeholder="Enter the remote server's public key">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="peer_allowed_ips">Allowed IPs</label>
+                            <input type="text" class="form-control" id="peer_allowed_ips" name="peer_allowed_ips"
+                                   value="0.0.0.0/0,::/0" placeholder="0.0.0.0/0,::/0">
+                            <small class="form-text text-muted">Networks to route through this connection (comma-separated)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="peer_preshared_key">Preshared Key (optional)</label>
+                            <input type="text" class="form-control" id="peer_preshared_key" name="peer_preshared_key"
+                                   placeholder="Optional - leave empty if not provided">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="peer_keepalive">Persistent Keepalive (seconds)</label>
+                            <input type="number" class="form-control" id="peer_keepalive" name="peer_keepalive"
+                                   value="25" min="0" max="600">
+                            <small class="form-text text-muted">Recommended: 25 for NAT traversal, 0 to disable</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="private_key">Private Key</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="private_key" name="private_key"
+                                   placeholder="Leave empty to auto-generate">
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-outline-secondary" onclick="generatePrivateKey()">
+                                    <i class="fas fa-sync"></i> Generate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="enabled" name="enabled" checked>
+                            <label class="custom-control-label" for="enabled">Enable immediately after creation</label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveInterface()">Save Interface</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let interfaces = [];
+let editingInterfaceId = null;
+
+// Load interfaces on page load
+$(document).ready(function() {
+    loadInterfaces();
+});
+
+function loadInterfaces() {
+    $.ajax({
+        url: '{{.basePath}}/api/interfaces',
+        method: 'GET',
+        success: function(data) {
+            interfaces = data || [];
+            renderInterfaces();
+        },
+        error: function(xhr) {
+            toastr.error('Failed to load interfaces: ' + (xhr.responseJSON?.message || 'Unknown error'));
+            $('#interfaces-container').html('<div class="alert alert-danger">Failed to load interfaces</div>');
+        }
+    });
+}
+
+function renderInterfaces() {
+    const container = $('#interfaces-container');
+    
+    if (interfaces.length === 0) {
+        container.html(`
+            <div class="text-center text-muted">
+                <i class="fas fa-network-wired fa-3x mb-3"></i>
+                <p>No interfaces configured yet</p>
+                <button type="button" class="btn btn-primary" onclick="showCreateInterfaceModal()">
+                    <i class="fas fa-plus"></i> Add Your First Interface
+                </button>
+            </div>
+        `);
+        return;
+    }
+
+    let html = '';
+    interfaces.forEach(iface => {
+        const statusBadge = iface.enabled ? 
+            '<span class="badge badge-success">Enabled</span>' : 
+            '<span class="badge badge-secondary">Disabled</span>';
+        
+        const typeBadge = iface.type === 'server' ? 
+            '<span class="badge badge-primary interface-badge">Server</span>' : 
+            '<span class="badge badge-info interface-badge">Client</span>';
+        
+        const defaultBadge = iface.is_default ? 
+            '<span class="badge badge-warning interface-badge">Default</span>' : '';
+
+        const addresses = Array.isArray(iface.interface_addresses) ? 
+            iface.interface_addresses.join(', ') : iface.interface_addresses;
+
+        html += `
+            <div class="interface-card ${!iface.enabled ? 'disabled' : ''}">
+                <div class="interface-header">
+                    <div>
+                        <span class="interface-name">${escapeHtml(iface.id)} - ${escapeHtml(iface.name)}</span>
+                        ${typeBadge} ${defaultBadge} ${statusBadge}
+                    </div>
+                </div>
+                <div class="interface-info">
+                    ${iface.type === 'server' ? 
+                        `<i class="fas fa-network-wired"></i> ${addresses} | <i class="fas fa-door-open"></i> Port: ${iface.listen_port || 'N/A'}` :
+                        `<i class="fas fa-map-marker-alt"></i> ${addresses} | <i class="fas fa-server"></i> Endpoint: ${iface.peer_endpoint || 'N/A'}`
+                    }
+                </div>
+                <div class="interface-actions">
+                    <button class="btn btn-sm btn-info" onclick="viewInterfaceDetails('${iface.id}')">
+                        <i class="fas fa-eye"></i> Details
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="editInterface('${iface.id}')">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    <button class="btn btn-sm ${iface.enabled ? 'btn-warning' : 'btn-success'}" 
+                            onclick="toggleInterface('${iface.id}')">
+                        <i class="fas fa-power-off"></i> ${iface.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    ${!iface.is_default ? `
+                        <button class="btn btn-sm btn-danger" onclick="deleteInterface('${iface.id}')">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+
+    container.html(html);
+}
+
+function showCreateInterfaceModal() {
+    editingInterfaceId = null;
+    $('#interfaceModalTitle').text('Add Interface');
+    $('#interfaceForm')[0].reset();
+    $('#interface_id').prop('readonly', false);
+    $('#interface_type').val('server');
+    toggleInterfaceTypeFields();
+    $('#interfaceModal').modal('show');
+}
+
+function editInterface(id) {
+    const iface = interfaces.find(i => i.id === id);
+    if (!iface) return;
+
+    editingInterfaceId = id;
+    $('#interfaceModalTitle').text('Edit Interface');
+    $('#interface_id').val(iface.id).prop('readonly', true);
+    $('#interface_name').val(iface.name);
+    $('#interface_type').val(iface.type);
+    
+    if (iface.type === 'server') {
+        $('#interface_addresses').val(Array.isArray(iface.interface_addresses) ? 
+            iface.interface_addresses.join(',') : iface.interface_addresses);
+        $('#listen_port').val(iface.listen_port);
+    } else {
+        $('#client_addresses').val(Array.isArray(iface.interface_addresses) ? 
+            iface.interface_addresses.join(',') : iface.interface_addresses);
+        $('#client_dns').val(Array.isArray(iface.dns) ? 
+            iface.dns.join(',') : iface.dns || '');
+        $('#client_mtu').val(iface.mtu || 1420);
+        $('#peer_endpoint').val(iface.peer_endpoint);
+        $('#peer_public_key').val(iface.peer_public_key);
+        $('#peer_allowed_ips').val(Array.isArray(iface.peer_allowed_ips) ? 
+            iface.peer_allowed_ips.join(',') : iface.peer_allowed_ips || '0.0.0.0/0,::/0');
+        $('#peer_preshared_key').val(iface.peer_preshared_key);
+        $('#peer_keepalive').val(iface.peer_persistent_keepalive || 25);
+    }
+    
+    $('#private_key').val(iface.private_key);
+    $('#enabled').prop('checked', iface.enabled);
+    
+    toggleInterfaceTypeFields();
+    $('#interfaceModal').modal('show');
+}
+
+function toggleInterfaceTypeFields() {
+    const type = $('#interface_type').val();
+    if (type === 'server') {
+        $('#server-fields').show();
+        $('#client-fields').hide();
+    } else {
+        $('#server-fields').hide();
+        $('#client-fields').show();
+    }
+}
+
+function generatePrivateKey() {
+    // This is a placeholder - in production, generate on backend
+    toastr.info('Leave empty and the server will generate a private key automatically');
+}
+
+function saveInterface() {
+    const type = $('#interface_type').val();
+    const addresses = type === 'server' ? 
+        $('#interface_addresses').val() : 
+        $('#client_addresses').val();
+
+    const data = {
+        id: $('#interface_id').val().trim(),
+        name: $('#interface_name').val().trim(),
+        type: type,
+        interface_addresses: addresses.split(',').map(s => s.trim()).filter(s => s),
+        private_key: $('#private_key').val().trim(),
+        enabled: $('#enabled').is(':checked')
+    };
+
+    if (type === 'server') {
+        data.listen_port = parseInt($('#listen_port').val()) || 0;
+    } else {
+        // Client-specific fields
+        const dnsValue = $('#client_dns').val().trim();
+        if (dnsValue) {
+            data.dns = dnsValue.split(',').map(s => s.trim()).filter(s => s);
+        }
+        const mtuValue = $('#client_mtu').val();
+        if (mtuValue) {
+            data.mtu = parseInt(mtuValue) || 0;
+        }
+        data.peer_endpoint = $('#peer_endpoint').val().trim();
+        data.peer_public_key = $('#peer_public_key').val().trim();
+        data.peer_allowed_ips = $('#peer_allowed_ips').val().split(',').map(s => s.trim()).filter(s => s);
+        data.peer_preshared_key = $('#peer_preshared_key').val().trim();
+        data.peer_persistent_keepalive = parseInt($('#peer_keepalive').val()) || 0;
+    }
+
+    const method = editingInterfaceId ? 'PUT' : 'POST';
+    const url = editingInterfaceId ? 
+        `{{.basePath}}/api/interfaces/${editingInterfaceId}` : 
+        '{{.basePath}}/api/interfaces';
+
+    $.ajax({
+        url: url,
+        method: method,
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function() {
+            toastr.success('Interface saved successfully');
+            $('#interfaceModal').modal('hide');
+            loadInterfaces();
+        },
+        error: function(xhr) {
+            toastr.error('Failed to save interface: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        }
+    });
+}
+
+function toggleInterface(id) {
+    $.ajax({
+        url: `{{.basePath}}/api/interfaces/${id}/toggle`,
+        method: 'POST',
+        contentType: 'application/json',
+        success: function() {
+            toastr.success('Interface status toggled');
+            loadInterfaces();
+        },
+        error: function(xhr) {
+            toastr.error('Failed to toggle interface: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        }
+    });
+}
+
+function deleteInterface(id) {
+    if (!confirm(`Are you sure you want to delete interface ${id}? This action cannot be undone.`)) {
+        return;
+    }
+
+    $.ajax({
+        url: `{{.basePath}}/api/interfaces/${id}`,
+        method: 'DELETE',
+        contentType: 'application/json',
+        success: function() {
+            toastr.success('Interface deleted successfully');
+            loadInterfaces();
+        },
+        error: function(xhr) {
+            toastr.error('Failed to delete interface: ' + (xhr.responseJSON?.message || 'Unknown error'));
+        }
+    });
+}
+
+function viewInterfaceDetails(id) {
+    window.location.href = `{{.basePath}}/?interface=${id}`;
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text ? text.replace(/[&<>"']/g, m => map[m]) : '';
+}
+</script>
+{{end}}
