@@ -164,6 +164,11 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 		// Preserve creation time
 		iface.Created = existingIface.Created
 
+		// Set default Table to "off" for Docker compatibility if not provided
+		if iface.Table == "" {
+			iface.Table = "off"
+		}
+
 		// If private key changed, recalculate public key
 		if iface.PrivateKey != "" && iface.PrivateKey != existingIface.PrivateKey {
 			key, err := wgtypes.ParseKey(iface.PrivateKey)
