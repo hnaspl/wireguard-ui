@@ -281,7 +281,8 @@ func (o *JsonDB) GetClients(hasQRCode bool) ([]model.ClientData, error) {
 	// read all client json files in "clients" directory
 	records, err := o.conn.ReadAll("clients")
 	if err != nil {
-		return clients, err
+		// Missing collection is not an error - return empty slice
+		return clients, nil
 	}
 
 	// build the ClientData list
