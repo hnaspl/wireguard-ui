@@ -469,7 +469,8 @@ function deleteInterface(id) {
 }
 
 function viewInterfaceDetails(id) {
-    window.location.href = `{{.basePath}}/?interface=${id}`;
+    // Redirect to clients page - clients are filtered by interface on the main page
+    window.location.href = `{{.basePath}}/`;
 }
 
 function escapeHtml(text) {
