@@ -312,9 +312,7 @@ func GetInterfaceFirewallRules(db store.IStore) echo.HandlerFunc {
 func InterfacesPage() echo.HandlerFunc {
 	return func(c echo.Context) error {
 		return c.Render(http.StatusOK, "interfaces.html", map[string]interface{}{
-			"baseData": map[string]interface{}{
-				"Active": "interfaces",
-			},
+			"baseData": model.BaseData{Active: "interfaces", CurrentUser: currentUser(c), Admin: isAdmin(c)},
 		})
 	}
 }
