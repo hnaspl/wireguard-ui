@@ -140,8 +140,22 @@ WireGuard Interfaces
                         <div class="form-group">
                             <label for="client_addresses">Your IP Address *</label>
                             <input type="text" class="form-control" id="client_addresses" name="client_addresses"
-                                   placeholder="e.g., 10.0.0.13/24">
-                            <small class="form-text text-muted">IP address(es) assigned to you by the remote server</small>
+                                   placeholder="e.g., 10.0.0.13/24,fd00:db8:0:abc::13/64">
+                            <small class="form-text text-muted">IP address(es) assigned to you by the remote server (comma-separated for IPv4 and IPv6)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="client_dns">DNS Servers</label>
+                            <input type="text" class="form-control" id="client_dns" name="dns"
+                                   placeholder="e.g., 10.0.0.1,64.6.64.6">
+                            <small class="form-text text-muted">DNS servers provided by remote server (comma-separated)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="client_mtu">MTU</label>
+                            <input type="number" class="form-control" id="client_mtu" name="mtu"
+                                   placeholder="1420" min="1280" max="1500">
+                            <small class="form-text text-muted">Maximum Transmission Unit (default: 1420)</small>
                         </div>
 
                         <div class="form-group">
@@ -328,6 +342,9 @@ function editInterface(id) {
     } else {
         $('#client_addresses').val(Array.isArray(iface.interface_addresses) ? 
             iface.interface_addresses.join(',') : iface.interface_addresses);
+        $('#client_dns').val(Array.isArray(iface.dns) ? 
+            iface.dns.join(',') : iface.dns || '');
+        $('#client_mtu').val(iface.mtu || 1420);
         $('#peer_endpoint').val(iface.peer_endpoint);
         $('#peer_public_key').val(iface.peer_public_key);
         $('#peer_allowed_ips').val(Array.isArray(iface.peer_allowed_ips) ? 
@@ -377,6 +394,15 @@ function saveInterface() {
     if (type === 'server') {
         data.listen_port = parseInt($('#listen_port').val()) || 0;
     } else {
+        // Client-specific fields
+        const dnsValue = $('#client_dns').val().trim();
+        if (dnsValue) {
+            data.dns = dnsValue.split(',').map(s => s.trim()).filter(s => s);
+        }
+        const mtuValue = $('#client_mtu').val();
+        if (mtuValue) {
+            data.mtu = parseInt(mtuValue) || 0;
+        }
         data.peer_endpoint = $('#peer_endpoint').val().trim();
         data.peer_public_key = $('#peer_public_key').val().trim();
         data.peer_allowed_ips = $('#peer_allowed_ips').val().split(',').map(s => s.trim()).filter(s => s);
