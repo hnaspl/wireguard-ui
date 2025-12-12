@@ -55,6 +55,11 @@ func (o *JsonDB) SaveInterface(iface model.WgInterface) error {
 		}
 	}
 
+	// Set default Table to "off" for Docker compatibility if not set
+	if iface.Table == "" {
+		iface.Table = "off"
+	}
+
 	// Set timestamps
 	if iface.Created.IsZero() {
 		iface.Created = time.Now().UTC()

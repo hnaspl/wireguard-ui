@@ -81,6 +81,11 @@ func CreateInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
+		// Set default Table to "off" for Docker compatibility if not provided
+		if iface.Table == "" {
+			iface.Table = "off"
+		}
+
 		// Check if interface already exists
 		_, err := db.GetInterface(iface.ID)
 		if err == nil {
