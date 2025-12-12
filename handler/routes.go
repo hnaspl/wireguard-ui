@@ -65,9 +65,18 @@ func Login(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Bad post data"})
 		}
 
-		username := data["username"].(string)
-		password := data["password"].(string)
-		rememberMe := data["rememberMe"].(bool)
+		// Safe type assertions with checks
+		username, ok := data["username"].(string)
+		if !ok || username == "" {
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Username is required"})
+		}
+		
+		password, ok := data["password"].(string)
+		if !ok || password == "" {
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Password is required"})
+		}
+		
+		rememberMe, _ := data["rememberMe"].(bool) // Default to false if not provided
 
 		if !usernameRegexp.MatchString(username) {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Please provide a valid username"})
@@ -899,6 +908,17 @@ func GlobalSettings(db store.IStore) echo.HandlerFunc {
 			log.Error("Cannot get global settings: ", err)
 		}
 
+		// Set sensible defaults if values are empty
+		if globalSettings.LanAll == "" {
+			globalSettings.LanAll = "192.168.0.0/16"
+		}
+		if globalSettings.LanProtect == "" {
+			globalSettings.LanProtect = "192.168.4.1/32"
+		}
+		if globalSettings.MasqOifPattern == "" {
+			globalSettings.MasqOifPattern = "eth+"
+		}
+
 		return c.Render(http.StatusOK, "global_settings.html", map[string]interface{}{
 			"baseData":       model.BaseData{Active: "global-settings", CurrentUser: currentUser(c), Admin: isAdmin(c)},
 			"globalSettings": globalSettings,
@@ -1154,12 +1174,29 @@ func ApplyServerConfig(db store.IStore, tmplDir fs.FS) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{false, "Cannot get global settings"})
 		}
 
+		// Get firewall rules for script generation
+		firewallRules, err := db.GetFirewallRules()
+		if err != nil {
+			log.Warn("Cannot get firewall rules (will proceed without them): ", err)
+			firewallRules = []model.FirewallRule{}
+		}
+
 		// Write config file
 		err = util.WriteWireGuardServerConfig(tmplDir, server, clients, users, settings)
 		if err != nil {
 			log.Error("Cannot apply server config: ", err)
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
 				false, fmt.Sprintf("Cannot apply server config: %v", err),
+			})
+		}
+
+		// Always generate PostUp/PostDown scripts with firewall rules integrated
+		// Scripts are saved to configured paths (defaults: /etc/wireguard/postup.sh, postdown.sh)
+		err = util.GenerateAndSaveScripts(settings, &server, firewallRules, clients)
+		if err != nil {
+			log.Error("Cannot generate scripts: ", err)
+			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
+				false, fmt.Sprintf("Cannot generate scripts: %v", err),
 			})
 		}
 

@@ -147,6 +147,14 @@
                                 </p>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="{{.basePath}}/firewall-rules" class="nav-link {{if eq .baseData.Active "firewall-rules" }}active{{end}}">
+                                <i class="nav-icon fas fa-shield-alt"></i>
+                                <p>
+                                    Firewall Rules
+                                </p>
+                            </a>
+                        </li>
                         {{if not .loginDisabled}}
                         <li class="nav-item">
                             <a href="{{.basePath}}/users-settings" class="nav-link {{if eq .baseData.Active "users-settings" }}active{{end}}">
@@ -259,6 +267,15 @@
                                         Enable after creation
                                     </label>
                                 </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="icheck-primary d-inline">
+                                    <input type="checkbox" id="is_site_to_site">
+                                    <label for="is_site_to_site">
+                                        Site-to-Site Connection
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">Enable this for site-to-site VPN connections or when connecting as a client to another WireGuard server</small>
                             </div>
                             <details>
                                 <summary><strong>Public and Preshared Keys</strong>
@@ -482,6 +499,12 @@
             if ($("#enabled").is(':checked')){
                 enabled = true;
             }
+            
+            let is_site_to_site = false;
+            if ($("#is_site_to_site").is(':checked')){
+                is_site_to_site = true;
+            }
+            
             const public_key = $("#client_public_key").val();
             const preshared_key = $("#client_preshared_key").val();
             
@@ -489,7 +512,7 @@
 
             const data = {"name": name, "email": email, "telegram_userid": telegram_userid, "allocated_ips": allocated_ips, "allowed_ips": allowed_ips,
                 "extra_allowed_ips": extra_allowed_ips, "endpoint": endpoint, "use_server_dns": use_server_dns, "enabled": enabled,
-                "public_key": public_key, "preshared_key": preshared_key, "additional_notes": additional_notes};
+                "is_site_to_site": is_site_to_site, "public_key": public_key, "preshared_key": preshared_key, "additional_notes": additional_notes};
 
             $.ajax({
                 cache: false,
@@ -631,6 +654,7 @@
                 $("#client_endpoint").val('');
                 $("#client_telegram_userid").val('');
                 $("#additional_notes").val('');
+                $("#is_site_to_site").prop("checked", false);
                 updateSubnetRangesList("#subnet_ranges");
                 updateIPAllocationSuggestion(true);
             });

@@ -40,6 +40,7 @@ func (o *JsonDB) Init() error {
 	var serverPath = path.Join(o.dbPath, "server")
 	var userPath = path.Join(o.dbPath, "users")
 	var wakeOnLanHostsPath = path.Join(o.dbPath, "wake_on_lan_hosts")
+	var firewallRulesPath = path.Join(o.dbPath, "firewall_rules")
 	var serverInterfacePath = path.Join(serverPath, "interfaces.json")
 	var serverKeyPairPath = path.Join(serverPath, "keypair.json")
 	var globalSettingPath = path.Join(serverPath, "global_settings.json")
@@ -57,6 +58,9 @@ func (o *JsonDB) Init() error {
 	}
 	if _, err := os.Stat(wakeOnLanHostsPath); os.IsNotExist(err) {
 		os.MkdirAll(wakeOnLanHostsPath, os.ModePerm)
+	}
+	if _, err := os.Stat(firewallRulesPath); os.IsNotExist(err) {
+		os.MkdirAll(firewallRulesPath, os.ModePerm)
 	}
 
 	// server's interface

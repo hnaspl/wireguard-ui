@@ -168,6 +168,15 @@ Wireguard Clients
                             </label>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <div class="icheck-primary d-inline">
+                            <input type="checkbox" id="_is_site_to_site">
+                            <label for="_is_site_to_site">
+                                Site-to-Site Connection
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Enable bidirectional peer communication for site-to-site VPN setup</small>
+                    </div>
                     <details>
                         <summary><strong>Public and Preshared Keys</strong>
                             <i class="fas fa-info-circle" data-toggle="tooltip"
@@ -656,6 +665,7 @@ Wireguard Clients
 
                         modal.find("#_use_server_dns").prop("checked", client.use_server_dns);
                         modal.find("#_enabled").prop("checked", client.enabled);
+                        modal.find("#_is_site_to_site").prop("checked", client.is_site_to_site);
 
                         modal.find("#_client_public_key").val(client.public_key);
                         modal.find("#_client_preshared_key").val(client.preshared_key);
@@ -782,11 +792,17 @@ Wireguard Clients
                 enabled = true;
             }
 
+            let is_site_to_site = false;
+
+            if ($("#_is_site_to_site").is(':checked')){
+                is_site_to_site = true;
+            }
+
             const additional_notes = $("#_additional_notes").val();
 
             const data = {"id": client_id, "name": name, "email": email, "telegram_userid": telegram_userid, "allocated_ips": allocated_ips,
                 "allowed_ips": allowed_ips, "extra_allowed_ips": extra_allowed_ips, "endpoint": endpoint,
-                "use_server_dns": use_server_dns, "enabled": enabled, "public_key": public_key, "preshared_key": preshared_key, "additional_notes": additional_notes};
+                "use_server_dns": use_server_dns, "enabled": enabled, "is_site_to_site": is_site_to_site, "public_key": public_key, "preshared_key": preshared_key, "additional_notes": additional_notes};
 
             $.ajax({
                 cache: false,

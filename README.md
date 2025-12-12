@@ -10,6 +10,9 @@ A web user interface to manage your WireGuard setup.
 - Authentication
 - Manage extra client information (name, email, etc.)
 - Retrieve client config using QR code / file / email / Telegram
+- **Site-to-Site VPN** - Connect multiple WireGuard networks together
+- **Firewall Rules Management** - Per-client access control with whitelist/blacklist support
+- **Auto-generated PostUp/PostDown Scripts** - Automatic iptables rule generation for site-to-site setups
 
 ![wireguard-ui 0.3.7](https://user-images.githubusercontent.com/37958026/177041280-e3e7ca16-d4cf-4e95-9920-68af15e780dd.png)
 
@@ -97,6 +100,23 @@ These environment variables are used to set the defaults used in `New Client` di
 | `WGUI_DEFAULT_CLIENT_USE_SERVER_DNS`        | Boolean value [`0`, `f`, `F`, `false`, `False`, `FALSE`, `1`, `t`, `T`, `true`, `True`, `TRUE`] | `true`      |
 | `WGUI_DEFAULT_CLIENT_ENABLE_AFTER_CREATION` | Boolean value [`0`, `f`, `F`, `false`, `False`, `FALSE`, `1`, `t`, `T`, `true`, `True`, `TRUE`] | `true`      |
 
+### PostUp/PostDown Scripts
+
+Scripts are **automatically generated** when you click "Apply Config". Firewall rules from the UI are always integrated into these scripts.
+
+| Variable                         | Description                                                                                      | Default              |
+|----------------------------------|--------------------------------------------------------------------------------------------------|----------------------|
+| `WGUI_POST_UP_SCRIPT_PATH`       | Path where PostUp script will be saved                                                           | `/etc/wireguard/postup.sh`   |
+| `WGUI_POST_DOWN_SCRIPT_PATH`     | Path where PostDown script will be saved                                                         | `/etc/wireguard/postdown.sh` |
+| `WGUI_LAN_ALL`                   | Local network ranges. Defines which networks can communicate with WireGuard peers                | `192.168.0.0/16`     |
+| `WGUI_LAN_PROTECT`               | Protected IPs that WireGuard clients cannot access (e.g., router admin interface)                | `192.168.4.1/32`     |
+| `WGUI_MASQ_OIF_PATTERN`          | Network interface pattern for NAT/masquerading to internet (e.g., `eth+` matches eth0, eth1)    | `eth+`               |
+
+**Notes:**
+- `WG_SUBNETS` is automatically calculated from `WGUI_SERVER_INTERFACE_ADDRESSES` and does not need to be configured separately
+- Firewall rules configured in the UI are automatically integrated into the generated scripts
+- Scripts include: INPUT chain rules, FORWARD chain management, protected IP blocking, MSS clamping, no-NAT for site-to-site, and internet masquerading
+
 ### Docker only
 
 These environment variables only apply to the docker container.
@@ -105,6 +125,200 @@ These environment variables only apply to the docker container.
 |-----------------------|---------------------------------------------------------------|---------|
 | `WGUI_MANAGE_START`   | Start/stop WireGuard when the container is started/stopped    | `false` |
 | `WGUI_MANAGE_RESTART` | Auto restart WireGuard when we Apply Config changes in the UI | `false` |
+
+## Site-to-Site VPN Configuration
+
+WireGuard-UI supports site-to-site VPN connections, allowing you to connect multiple WireGuard networks together.
+
+### Setting Up a Site-to-Site Connection
+
+1. Navigate to **Wireguard Clients** and click **New Client**
+2. Enter a name for the remote site (e.g., "Remote Office" or "wg_friend")
+3. Check the **"Site-to-Site Connection"** checkbox
+4. Configure the peer:
+   - **Endpoint**: Enter the remote site's public IP and port (e.g., `vpn.remotesite.com:51820`)
+   - **Allowed IPs**: Enter the remote network ranges you want to access (e.g., `10.0.0.0/24`)
+   - **Public Key**: Enter the remote site's public key
+   - **PresharedKey** (optional): For additional security
+   - **Persistent Keepalive**: Recommended for site-to-site (e.g., `25`)
+5. Click **Submit**
+
+### How It Works
+
+When you enable **Site-to-Site Connection**:
+- The client becomes a peer in your server's WireGuard configuration
+- Your server will connect TO the remote site (not the other way around)
+- Traffic is routed bidirectionally between your network and the remote network
+- No NAT is applied to site-to-site traffic (preserving real IP addresses)
+- MSS clamping is automatically configured to handle MTU issues
+
+### Example Use Case
+
+You have two sites:
+- **Site A**: Your main office with network `192.168.1.0/24`
+- **Site B**: Remote location with network `10.0.0.0/24`
+
+On Site A's WireGuard-UI:
+1. Create a site-to-site client for "Site B"
+2. Set Endpoint to Site B's public IP
+3. Set AllowedIPs to `10.0.0.0/24`
+4. Add firewall rules (optional) to restrict which services Site B can access on your network
+
+### Connecting as a Client to External WireGuard Servers
+
+If someone sends you a WireGuard configuration file and you want to connect your server TO their WireGuard network (acting as a client), follow these steps:
+
+#### Example: Friend sends you this config
+```ini
+[Interface]
+Address = 10.0.0.13/24,fd00:db8:0:abc::13/64
+PrivateKey = <your_private_key>
+DNS = 10.0.0.1,fd00:db8:0:abc::1,64.6.64.6
+MTU = 1420
+
+[Peer]
+AllowedIPs = 0.0.0.0/0,::/0
+Endpoint = friend-vpn-server.com:51820
+PersistentKeepalive = 25
+PublicKey = <friend_public_key>
+```
+
+#### Steps to Add in WireGuard-UI:
+
+1. **Navigate to Wireguard Clients** and click **New Client**
+
+2. **Fill in the fields:**
+   - **Name**: Enter a descriptive name (e.g., "wg_friend" or "Friend's VPN")
+   - **IP Allocation**: Enter the address(es) your friend assigned to you (e.g., `10.0.0.13/24`)
+   - **Allowed IPs**: Enter the networks you want to route through this connection
+     - For full tunnel: `0.0.0.0/0,::/0`
+     - For specific networks only: `10.0.0.0/24,192.168.50.0/24`
+   - **Extra Allowed IPs**: Leave empty (this is for traffic FROM the friend TO you)
+   - **Endpoint**: Enter your friend's server address (e.g., `friend-vpn-server.com:51820`)
+   - **Enable after creation**: Check this box
+   - **Site-to-Site Connection**: Check this box
+
+3. **Expand "Public and Preshared Keys":**
+   - **Public Key**: Enter your friend's public key from the `[Peer]` section
+   - **Preshared Key**: If your friend provided one, enter it here. Otherwise leave empty or enter `-` to skip generation
+
+4. **Expand "Additional configuration"** (optional):
+   - Add notes about this connection
+
+5. Click **Submit**
+
+6. **Apply Configuration**:
+   - Click the **Apply Config** button
+   - Confirm to write the config and restart WireGuard
+
+#### Important Notes:
+
+- **Private Key**: Your server uses the private key configured in **Wireguard Server** settings for the wg0 interface. You DON'T need to enter a private key when adding an external server - your existing interface private key is used automatically. The private key shown in your friend's config is just for reference about what key THEY expect you to use, but your server already has its own private key configured.
+  
+- **Public Key**: The public key you enter in the "Public and Preshared Keys" section is YOUR FRIEND'S public key (from their `[Peer]` section of the config they manage), NOT your private key.
+
+- **How it works**: When you add your friend's server as a "client" in the UI, you're actually adding a [Peer] section to your wg0.conf. Your server connects TO their endpoint using your server's existing private key. No additional private key is needed.
+
+- **DNS Settings**: DNS from the friend's config is managed in **Wireguard Server** → **DNS Servers** settings, not per-client.
+
+- **MTU**: Set MTU in **Wireguard Server** settings if needed (default 1420 is usually fine).
+
+- **Persistent Keepalive**: Can be configured in **Additional configuration** section of the client edit dialog.
+
+#### Verifying the Connection:
+
+After applying the config:
+1. Check **Status** page to see if the peer is connected
+2. Try pinging a server on the friend's network
+3. Check the "Latest Handshake" timestamp to confirm active connection
+
+#### Multiple External Connections:
+
+You can add multiple external WireGuard servers this way:
+- Create a separate client entry for each external server
+- Each will appear as a `[Peer]` section in your wg0.conf
+- Mark each with "Site-to-Site Connection" for proper routing
+
+## Firewall Rules Management
+
+Control which clients can access specific parts of your network with fine-grained firewall rules.
+
+### Access Control Logic
+
+- **Clients WITH firewall rules**: Only the traffic specified in firewall rules is allowed. All other traffic is blocked.
+- **Clients WITHOUT firewall rules**: Full network access (default allow), respecting only the protected IP restrictions.
+
+This enables flexible access control where you can:
+- Give trusted clients full access (no firewall rules)
+- Restrict site-to-site peers to specific services
+- Limit mobile clients to only what they need
+
+### Managing Firewall Rules
+
+1. Navigate to **Settings** → **Firewall Rules**
+2. Click **Add Rule** to create a new rule
+3. Configure the rule:
+   - **Client**: Select which client this rule applies to
+   - **Allowed IP**: The destination IP or network (e.g., `192.168.1.10` or `192.168.1.0/24`)
+   - **Allowed Port**: Port or port range (e.g., `443`, `80:443`, or `any`)
+   - **Protocol**: TCP, UDP, or any
+   - **Description**: Note about what this rule allows
+   - **Enabled**: Toggle to enable/disable the rule
+4. Click **Save**
+
+### How Firewall Rules Work
+
+Firewall rules are **automatically integrated** into PostUp/PostDown scripts when you click **Apply Config**:
+
+1. Scripts are generated and saved to configured paths (default: `/etc/wireguard/postup.sh` and `/etc/wireguard/postdown.sh`)
+2. Generated scripts include:
+   - Base iptables rules for WireGuard traffic
+   - **Your firewall rules from the UI automatically injected**
+   - MSS clamping for MTU handling
+   - No-NAT configuration for site-to-site VPNs
+   - Protected IP blocking (e.g., router admin interface)
+   - Internet masquerading for external traffic
+3. Firewall rules are enforced using iptables FORWARD chain rules
+
+**No configuration needed** - firewall rules always work once you apply config
+
+### Environment Variables for Scripts
+
+Configure these in **Global Settings**:
+
+- **WG_SUBNETS**: Automatically calculated from your Wireguard Server interface addresses (no manual configuration needed)
+- **LAN_ALL**: Your local network ranges (e.g., `192.168.0.0/16`)
+- **LAN_PROTECT**: IPs to protect from WireGuard access (e.g., `192.168.4.1/32` for router admin)
+- **MASQ_OIF_PATTERN**: Interface pattern for internet NAT (e.g., `eth+`)
+
+These variables are automatically injected into the generated scripts.
+
+### Example Scenarios
+
+#### Scenario 1: Restricted Site-to-Site Connection
+```
+Client: "wg_friend" (site-to-site enabled)
+Firewall Rules:
+  - Allow 192.168.1.10 port 443 (HTTPS to web server)
+  - Allow 192.168.1.20 port 22 (SSH to backup server)
+Result: Friend can only access those two services, all other traffic blocked
+```
+
+#### Scenario 2: Mobile User with Limited Access
+```
+Client: "employee_phone"
+Firewall Rules:
+  - Allow 192.168.1.0/24 port 443 (Web services)
+  - Allow 192.168.2.5 port 3389 (RDP to their workstation)
+Result: Employee can access web services and their workstation only
+```
+
+#### Scenario 3: Trusted Admin
+```
+Client: "admin_laptop"
+Firewall Rules: (none)
+Result: Full network access except protected IPs
+```
 
 ## Auto restart WireGuard daemon
 
