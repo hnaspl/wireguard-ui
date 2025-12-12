@@ -264,6 +264,7 @@ func main() {
 	app.PUT(util.BasePath+"/api/interfaces/:id", handler.UpdateInterface(db), handler.ValidSession, handler.ContentTypeJson, handler.NeedsAdmin)
 	app.DELETE(util.BasePath+"/api/interfaces/:id", handler.DeleteInterface(db), handler.ValidSession, handler.ContentTypeJson, handler.NeedsAdmin)
 	app.POST(util.BasePath+"/api/interfaces/:id/toggle", handler.ToggleInterface(db), handler.ValidSession, handler.ContentTypeJson, handler.NeedsAdmin)
+	app.POST(util.BasePath+"/api/interfaces/:id/apply-config", handler.ApplyInterfaceConfig(db, tmplDir), handler.ValidSession, handler.ContentTypeJson, handler.NeedsAdmin)
 	app.GET(util.BasePath+"/api/interfaces/:id/clients", handler.GetInterfaceClients(db), handler.ValidSession, handler.NeedsAdmin)
 	app.GET(util.BasePath+"/api/interfaces/:id/firewall-rules", handler.GetInterfaceFirewallRules(db), handler.ValidSession, handler.NeedsAdmin)
 	app.GET(util.BasePath+"/status", handler.Status(db), handler.ValidSession, handler.RefreshSession)

@@ -1,0 +1,215 @@
+package util
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
+
+	"github.com/labstack/gommon/log"
+	"github.com/ngoduykhanh/wireguard-ui/model"
+	"github.com/ngoduykhanh/wireguard-ui/store"
+)
+
+// WriteInterfaceConfig writes the WireGuard configuration for a specific interface
+func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []model.ClientData, 
+	users []model.User, globalSettings model.GlobalSetting) error {
+	
+	var tmplWireguardConf string
+
+	// if set, read wg.conf template from WgConfTemplate
+	if len(WgConfTemplate) > 0 {
+		fileContentBytes, err := os.ReadFile(WgConfTemplate)
+		if err != nil {
+			return err
+		}
+		tmplWireguardConf = string(fileContentBytes)
+	} else {
+		// read default wg.conf template file to string
+		fileContent, err := StringFromEmbedFile(tmplDir, "wg.conf")
+		if err != nil {
+			return err
+		}
+		tmplWireguardConf = fileContent
+	}
+
+	// escape multiline notes for clients
+	escapedClientDataList := []model.ClientData{}
+	for _, cd := range clients {
+		if cd.Client != nil && cd.Client.AdditionalNotes != "" {
+			cd.Client.AdditionalNotes = strings.ReplaceAll(cd.Client.AdditionalNotes, "\n", "\n# ")
+		}
+		escapedClientDataList = append(escapedClientDataList, cd)
+	}
+
+	// parse the template
+	t, err := template.New("wg_config").Parse(tmplWireguardConf)
+	if err != nil {
+		return err
+	}
+
+	// Ensure directory exists
+	configDir := filepath.Dir(iface.ConfigFilePath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("cannot create config directory: %v", err)
+	}
+
+	// write config file to disk
+	f, err := os.Create(iface.ConfigFilePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	// Build server config from interface for template compatibility
+	serverConfig := model.Server{
+		KeyPair: &model.ServerKeypair{
+			PrivateKey: iface.PrivateKey,
+			PublicKey:  iface.PublicKey,
+		},
+		Interface: &model.ServerInterface{
+			Addresses:  iface.InterfaceAddresses,
+			ListenPort: iface.ListenPort,
+			PostUp:     iface.PostUpScript,
+			PostDown:   iface.PostDownScript,
+		},
+	}
+
+	config := map[string]interface{}{
+		"serverConfig":   serverConfig,
+		"clientDataList": escapedClientDataList,
+		"globalSettings": globalSettings,
+		"usersList":      users,
+	}
+
+	err = t.Execute(f, config)
+	if err != nil {
+		return err
+	}
+
+	// Ensure the file has proper permissions
+	if err := ManagePerms(iface.ConfigFilePath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// GenerateAndSaveInterfaceScripts generates and saves PostUp/PostDown scripts for a specific interface
+func GenerateAndSaveInterfaceScripts(interfaceID string, iface model.WgInterface, 
+	globalSettings model.GlobalSetting, firewallRules []model.FirewallRule, clients []model.ClientData) error {
+	
+	// Calculate WG_SUBNETS from interface addresses
+	wgSubnets := strings.Join(iface.InterfaceAddresses, ",")
+
+	// Generate PostUp script
+	postUpScript := GeneratePostUpScript(globalSettings, wgSubnets, firewallRules, clients, interfaceID)
+	
+	// Generate PostDown script
+	postDownScript := GeneratePostDownScript(globalSettings, wgSubnets, firewallRules, clients, interfaceID)
+
+	// Determine script paths - use interface-specific paths
+	configDir := filepath.Dir(iface.ConfigFilePath)
+	if configDir == "" || configDir == "." {
+		configDir = "/etc/wireguard"
+	}
+
+	postUpPath := filepath.Join(configDir, interfaceID+"-postup.sh")
+	postDownPath := filepath.Join(configDir, interfaceID+"-postdown.sh")
+
+	// If global settings specify custom paths and this is the default interface, use those
+	if iface.IsDefault {
+		if globalSettings.PostUpScriptPath != "" {
+			postUpPath = globalSettings.PostUpScriptPath
+		}
+		if globalSettings.PostDownScriptPath != "" {
+			postDownPath = globalSettings.PostDownScriptPath
+		}
+	}
+
+	// Write PostUp script
+	if err := os.WriteFile(postUpPath, []byte(postUpScript), 0755); err != nil {
+		return fmt.Errorf("cannot write PostUp script: %v", err)
+	}
+
+	// Write PostDown script
+	if err := os.WriteFile(postDownPath, []byte(postDownScript), 0755); err != nil {
+		return fmt.Errorf("cannot write PostDown script: %v", err)
+	}
+
+	log.Infof("Generated scripts for interface %s: %s, %s", interfaceID, postUpPath, postDownPath)
+
+	return nil
+}
+
+// ApplyInterfaceConfig applies configuration for a specific interface
+func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) error {
+	// Get the interface
+	iface, err := db.GetInterface(interfaceID)
+	if err != nil {
+		return fmt.Errorf("cannot get interface %s: %v", interfaceID, err)
+	}
+
+	// Get clients for this interface
+	clients, err := db.GetClientsByInterface(interfaceID, false)
+	if err != nil {
+		return fmt.Errorf("cannot get clients for interface %s: %v", interfaceID, err)
+	}
+
+	// Get users (needed for template)
+	users, err := db.GetUsers()
+	if err != nil {
+		return fmt.Errorf("cannot get users: %v", err)
+	}
+
+	// Get global settings
+	settings, err := db.GetGlobalSettings()
+	if err != nil {
+		return fmt.Errorf("cannot get global settings: %v", err)
+	}
+
+	// Get firewall rules for this interface
+	firewallRules, err := db.GetFirewallRulesByInterface(interfaceID)
+	if err != nil {
+		log.Warnf("Cannot get firewall rules for interface %s (will proceed without them): %v", interfaceID, err)
+		firewallRules = []model.FirewallRule{}
+	}
+
+	// Write interface config file
+	if err := WriteInterfaceConfig(tmplDir, iface, clients, users, settings); err != nil {
+		return fmt.Errorf("cannot write config for interface %s: %v", interfaceID, err)
+	}
+
+	// Generate and save scripts
+	if err := GenerateAndSaveInterfaceScripts(interfaceID, iface, settings, firewallRules, clients); err != nil {
+		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
+	}
+
+	return nil
+}
+
+// ApplyAllInterfacesConfig applies configuration for all enabled interfaces
+func ApplyAllInterfacesConfig(db store.IStore, tmplDir fs.FS) error {
+	interfaces, err := db.GetInterfaces()
+	if err != nil {
+		return fmt.Errorf("cannot get interfaces: %v", err)
+	}
+
+	// Apply config for each enabled interface
+	for _, iface := range interfaces {
+		if !iface.Enabled {
+			log.Infof("Skipping disabled interface: %s", iface.ID)
+			continue
+		}
+
+		log.Infof("Applying configuration for interface: %s", iface.ID)
+		if err := ApplyInterfaceConfig(db, tmplDir, iface.ID); err != nil {
+			// Log error but continue with other interfaces
+			log.Errorf("Failed to apply config for interface %s: %v", iface.ID, err)
+		}
+	}
+
+	return nil
+}

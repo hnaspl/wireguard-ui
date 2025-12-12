@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"io/fs"
 	"net/http"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 
 	"github.com/ngoduykhanh/wireguard-ui/model"
 	"github.com/ngoduykhanh/wireguard-ui/store"
+	"github.com/ngoduykhanh/wireguard-ui/util"
 )
 
 // GetInterfaces returns list of all interfaces
@@ -312,6 +315,33 @@ func InterfacesPage() echo.HandlerFunc {
 			"baseData": map[string]interface{}{
 				"Active": "interfaces",
 			},
+		})
+	}
+}
+
+// ApplyInterfaceConfig applies configuration for a specific interface
+func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		interfaceID := c.Param("id")
+
+		// Check if interface exists
+		_, err := db.GetInterface(interfaceID)
+		if err != nil {
+			return c.JSON(http.StatusNotFound, jsonHTTPResponse{
+				false, "Interface not found",
+			})
+		}
+
+		// Apply configuration for this interface
+		if err := util.ApplyInterfaceConfig(db, tmplDir, interfaceID); err != nil {
+			log.Error("Cannot apply interface config: ", err)
+			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
+				false, fmt.Sprintf("Cannot apply interface config: %v", err),
+			})
+		}
+
+		return c.JSON(http.StatusOK, jsonHTTPResponse{
+			true, "Applied configuration for interface " + interfaceID + " successfully",
 		})
 	}
 }
