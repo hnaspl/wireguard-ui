@@ -431,6 +431,28 @@ func NewClient(db store.IStore) echo.HandlerFunc {
 			}
 		}
 
+		// Assign to default interface if not specified
+		if client.InterfaceID == "" {
+			// Try to get the default interface
+			interfaces, err := db.GetInterfaces()
+			if err == nil && len(interfaces) > 0 {
+				// Find the default interface
+				for _, iface := range interfaces {
+					if iface.IsDefault {
+						client.InterfaceID = iface.ID
+						break
+					}
+				}
+				// If no default found, use the first interface
+				if client.InterfaceID == "" {
+					client.InterfaceID = interfaces[0].ID
+				}
+			} else {
+				// Fallback to wg0 for backward compatibility
+				client.InterfaceID = "wg0"
+			}
+		}
+
 		// read server information
 		server, err := db.GetServer()
 		if err != nil {

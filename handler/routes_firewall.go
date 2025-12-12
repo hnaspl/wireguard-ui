@@ -83,6 +83,31 @@ func SaveFirewallRule(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Client ID, allowed IP, and port are required"})
 		}
 
+		// Assign to interface based on client's interface if not specified
+		if rule.InterfaceID == "" {
+			// Get the client to find their interface
+			client, err := db.GetClientByID(rule.ClientID, model.QRCodeSettings{Enabled: false})
+			if err == nil && client.Client != nil && client.Client.InterfaceID != "" {
+				rule.InterfaceID = client.Client.InterfaceID
+			} else {
+				// Fallback to default interface
+				interfaces, err := db.GetInterfaces()
+				if err == nil && len(interfaces) > 0 {
+					for _, iface := range interfaces {
+						if iface.IsDefault {
+							rule.InterfaceID = iface.ID
+							break
+						}
+					}
+					if rule.InterfaceID == "" {
+						rule.InterfaceID = interfaces[0].ID
+					}
+				} else {
+					rule.InterfaceID = "wg0"
+				}
+			}
+		}
+
 		// Generate ID for new rule
 		rule.ID = xid.New().String()
 		rule.CreatedAt = time.Now().UTC()
