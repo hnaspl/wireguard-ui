@@ -164,6 +164,74 @@ On Site A's WireGuard-UI:
 3. Set AllowedIPs to `10.0.0.0/24`
 4. Add firewall rules (optional) to restrict which services Site B can access on your network
 
+### Connecting as a Client to External WireGuard Servers
+
+If someone sends you a WireGuard configuration file and you want to connect your server TO their WireGuard network (acting as a client), follow these steps:
+
+#### Example: Friend sends you this config
+```ini
+[Interface]
+Address = 10.0.0.13/24,fd00:db8:0:abc::13/64
+PrivateKey = <your_private_key>
+DNS = 10.0.0.1,fd00:db8:0:abc::1,64.6.64.6
+MTU = 1420
+
+[Peer]
+AllowedIPs = 0.0.0.0/0,::/0
+Endpoint = friend-vpn-server.com:51820
+PersistentKeepalive = 25
+PublicKey = <friend_public_key>
+```
+
+#### Steps to Add in WireGuard-UI:
+
+1. **Navigate to Wireguard Clients** and click **New Client**
+
+2. **Fill in the fields:**
+   - **Name**: Enter a descriptive name (e.g., "wg_friend" or "Friend's VPN")
+   - **IP Allocation**: Enter the address(es) your friend assigned to you (e.g., `10.0.0.13/24`)
+   - **Allowed IPs**: Enter the networks you want to route through this connection
+     - For full tunnel: `0.0.0.0/0,::/0`
+     - For specific networks only: `10.0.0.0/24,192.168.50.0/24`
+   - **Extra Allowed IPs**: Leave empty (this is for traffic FROM the friend TO you)
+   - **Endpoint**: Enter your friend's server address (e.g., `friend-vpn-server.com:51820`)
+   - **Enable after creation**: Check this box
+   - **Site-to-Site Connection**: Check this box
+
+3. **Expand "Public and Preshared Keys":**
+   - **Public Key**: Enter your friend's public key from the `[Peer]` section
+   - **Preshared Key**: If your friend provided one, enter it here. Otherwise leave empty or enter `-` to skip generation
+
+4. **Expand "Additional configuration"** (optional):
+   - Add notes about this connection
+
+5. Click **Submit**
+
+6. **Apply Configuration**:
+   - Click the **Apply Config** button
+   - Confirm to write the config and restart WireGuard
+
+#### Important Notes:
+
+- **Private Key Security**: The private key in your friend's config should be kept on YOUR server only. Don't share it.
+- **DNS Settings**: DNS from the friend's config is managed in **Wireguard Server** → **DNS Servers** settings, not per-client.
+- **MTU**: Set MTU in **Wireguard Server** settings if needed (default 1420 is usually fine).
+- **Persistent Keepalive**: Can be configured in **Additional configuration** section of the client edit dialog.
+
+#### Verifying the Connection:
+
+After applying the config:
+1. Check **Status** page to see if the peer is connected
+2. Try pinging a server on the friend's network
+3. Check the "Latest Handshake" timestamp to confirm active connection
+
+#### Multiple External Connections:
+
+You can add multiple external WireGuard servers this way:
+- Create a separate client entry for each external server
+- Each will appear as a `[Peer]` section in your wg0.conf
+- Mark each with "Site-to-Site Connection" for proper routing
+
 ## Firewall Rules Management
 
 Control which clients can access specific parts of your network with fine-grained firewall rules.
