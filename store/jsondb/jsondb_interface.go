@@ -155,6 +155,7 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 		PublicKey:          server.KeyPair.PublicKey,
 		ListenPort:         server.Interface.ListenPort,
 		MTU:                0,          // Will use global setting
+		Table:              "off",      // Default to "off" for Docker compatibility
 		DNS:                []string{}, // Will use global setting
 		PostUpScript:       server.Interface.PostUp,
 		PostDownScript:     server.Interface.PostDown,

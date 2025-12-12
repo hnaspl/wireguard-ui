@@ -32,6 +32,7 @@ Firewall Rules Management
                         <table id="rules-table" class="table table-bordered table-striped">
                             <thead>
                                 <tr>
+                                    <th>Interface</th>
                                     <th>Client</th>
                                     <th>Allowed IP</th>
                                     <th>Port</th>
@@ -63,6 +64,12 @@ Firewall Rules Management
             </div>
             <form name="frm_new_rule" id="frm_new_rule">
                 <div class="modal-body">
+                    <div class="form-group">
+                        <label for="n_interface_id" class="control-label">Interface</label>
+                        <select id="n_interface_id" name="n_interface_id" class="form-control" required>
+                        </select>
+                        <small class="form-text text-muted">Rules will apply to traffic on this WireGuard interface</small>
+                    </div>
                     <div class="form-group">
                         <label for="n_client_id" class="control-label">Client</label>
                         <select id="n_client_id" name="n_client_id" class="form-control select2" required>
@@ -122,6 +129,12 @@ Firewall Rules Management
             <form name="frm_edit_rule" id="frm_edit_rule">
                 <div class="modal-body">
                     <input type="hidden" id="e_rule_id" name="e_rule_id">
+                    <div class="form-group">
+                        <label for="e_interface_id" class="control-label">Interface</label>
+                        <select id="e_interface_id" name="e_interface_id" class="form-control" required>
+                        </select>
+                        <small class="form-text text-muted">Rules will apply to traffic on this WireGuard interface</small>
+                    </div>
                     <div class="form-group">
                         <label for="e_client_id" class="control-label">Client</label>
                         <select id="e_client_id" name="e_client_id" class="form-control select2" required>
@@ -192,6 +205,31 @@ Firewall Rules Management
 <script>
     let deleteRuleId = '';
 
+    function loadInterfaces() {
+        $.ajax({
+            cache: false,
+            method: 'GET',
+            url: '{{.basePath}}/api/interfaces',
+            dataType: 'json',
+            contentType: "application/json",
+            success: function (data) {
+                $('#n_interface_id option').remove();
+                $('#e_interface_id option').remove();
+                $.each(data, function(index, iface) {
+                    if (iface.enabled) {
+                        const label = iface.name + ' (' + iface.id + ')';
+                        $('#n_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
+                        $('#e_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
+                    }
+                });
+            },
+            error: function (jqXHR, exception) {
+                const responseJson = jQuery.parseJSON(jqXHR.responseText);
+                toastr.error(responseJson['message']);
+            }
+        });
+    }
+
     function loadClients() {
         $.ajax({
             cache: false,
@@ -236,7 +274,7 @@ Firewall Rules Management
     function renderFirewallRules(rules) {
         $('#rules-tbody').empty();
         if (!rules || rules.length === 0) {
-            $('#rules-tbody').append('<tr><td colspan="7" class="text-center">No firewall rules configured</td></tr>');
+            $('#rules-tbody').append('<tr><td colspan="8" class="text-center">No firewall rules configured</td></tr>');
             return;
         }
         
@@ -246,6 +284,7 @@ Firewall Rules Management
                 '<span class="badge badge-secondary">Disabled</span>';
             
             const row = `<tr>
+                <td><span class="badge badge-primary">${rule.interface_id || 'wg0'}</span></td>
                 <td>${rule.client_name || rule.client_id}</td>
                 <td>${rule.allowed_ip}</td>
                 <td>${rule.allowed_port}</td>
@@ -274,6 +313,7 @@ Firewall Rules Management
             contentType: "application/json",
             success: function (rule) {
                 $('#e_rule_id').val(rule.id);
+                $('#e_interface_id').val(rule.interface_id || 'wg0');
                 $('#e_client_id').val(rule.client_id);
                 $('#e_allowed_ip').val(rule.allowed_ip);
                 $('#e_allowed_port').val(rule.allowed_port);
@@ -295,6 +335,7 @@ Firewall Rules Management
     }
 
     $(document).ready(function() {
+        loadInterfaces();
         loadClients();
         loadFirewallRules();
 
@@ -302,6 +343,7 @@ Firewall Rules Management
         $('#frm_new_rule').on('submit', function(e) {
             e.preventDefault();
             const data = {
+                interface_id: $('#n_interface_id').val(),
                 client_id: $('#n_client_id').val(),
                 allowed_ip: $('#n_allowed_ip').val(),
                 allowed_port: $('#n_allowed_port').val(),
@@ -335,6 +377,7 @@ Firewall Rules Management
             e.preventDefault();
             const data = {
                 id: $('#e_rule_id').val(),
+                interface_id: $('#e_interface_id').val(),
                 client_id: $('#e_client_id').val(),
                 allowed_ip: $('#e_allowed_ip').val(),
                 allowed_port: $('#e_allowed_port').val(),

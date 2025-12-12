@@ -14,6 +14,7 @@ type WgInterface struct {
 	PublicKey          string    `json:"public_key"`       // Auto-calculated from private key
 	ListenPort         int       `json:"listen_port"`      // For server type interfaces
 	MTU                int       `json:"mtu"`              // MTU setting
+	Table              string    `json:"table"`            // Routing table ("off", "auto", or number) - defaults to "off" for Docker compatibility
 	DNS                []string  `json:"dns"`              // DNS servers
 	PostUpScript       string    `json:"post_up_script"`   // Custom PostUp script content
 	PostDownScript     string    `json:"post_down_script"` // Custom PostDown script content

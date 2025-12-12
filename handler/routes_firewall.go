@@ -83,28 +83,29 @@ func SaveFirewallRule(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Client ID, allowed IP, and port are required"})
 		}
 
-		// Assign to interface based on client's interface if not specified
+		// Validate interface exists if specified
 		if rule.InterfaceID == "" {
-			// Get the client to find their interface
-			client, err := db.GetClientByID(rule.ClientID, model.QRCodeSettings{Enabled: false})
-			if err == nil && client.Client != nil && client.Client.InterfaceID != "" {
-				rule.InterfaceID = client.Client.InterfaceID
-			} else {
-				// Fallback to default interface
-				interfaces, err := db.GetInterfaces()
-				if err == nil && len(interfaces) > 0 {
-					for _, iface := range interfaces {
-						if iface.IsDefault {
-							rule.InterfaceID = iface.ID
-							break
-						}
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Interface ID is required"})
+		}
+		
+		// Verify the interface exists
+		_, err := db.GetInterface(rule.InterfaceID)
+		if err != nil {
+			log.Warnf("Interface %s not found, using default", rule.InterfaceID)
+			// Fallback to default interface
+			interfaces, err := db.GetInterfaces()
+			if err == nil && len(interfaces) > 0 {
+				for _, iface := range interfaces {
+					if iface.IsDefault {
+						rule.InterfaceID = iface.ID
+						break
 					}
-					if rule.InterfaceID == "" {
-						rule.InterfaceID = interfaces[0].ID
-					}
-				} else {
-					rule.InterfaceID = "wg0"
 				}
+				if rule.InterfaceID == "" {
+					rule.InterfaceID = interfaces[0].ID
+				}
+			} else {
+				rule.InterfaceID = "wg0"
 			}
 		}
 
@@ -142,7 +143,7 @@ func UpdateFirewallRule(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{false, "Client ID, allowed IP, and port are required"})
 		}
 
-		// Get existing rule to preserve created_at
+		// Get existing rule to preserve created_at and interface_id if not provided
 		existingRule, err := db.GetFirewallRule(ruleID)
 		if err != nil {
 			return c.JSON(http.StatusNotFound, jsonHTTPResponse{false, "Rule not found"})
@@ -151,6 +152,11 @@ func UpdateFirewallRule(db store.IStore) echo.HandlerFunc {
 		rule.ID = ruleID
 		rule.CreatedAt = existingRule.CreatedAt
 		rule.UpdatedAt = time.Now().UTC()
+		
+		// Preserve interface_id if not provided in update
+		if rule.InterfaceID == "" {
+			rule.InterfaceID = existingRule.InterfaceID
+		}
 
 		if err := db.SaveFirewallRule(rule); err != nil {
 			log.Errorf("Cannot update firewall rule: %v", err)

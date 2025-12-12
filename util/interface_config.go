@@ -108,6 +108,7 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 		"clientDataList": escapedClientDataList,
 		"globalSettings": globalSettings,
 		"usersList":      users,
+		"interface":      iface, // Pass interface object for Table directive
 	}
 
 	err = t.Execute(f, config)
