@@ -89,7 +89,7 @@ func SaveFirewallRule(db store.IStore) echo.HandlerFunc {
 		}
 		
 		// Verify the interface exists
-		_, err := db.GetInterface(rule.InterfaceID)
+		_, err = db.GetInterface(rule.InterfaceID)
 		if err != nil {
 			log.Warnf("Interface %s not found, using default", rule.InterfaceID)
 			// Fallback to default interface
