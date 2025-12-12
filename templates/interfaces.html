@@ -39,7 +39,10 @@ WireGuard Interfaces
     }
 </style>
 {{end}}
-{{define "body.html"}}
+{{define "page_title"}}
+WireGuard Interfaces
+{{end}}
+{{define "page_content"}}
 <section class="content-header">
     <div class="container-fluid">
         <div class="row mb-2">
@@ -479,5 +482,14 @@ function escapeHtml(text) {
     };
     return text ? text.replace(/[&<>"']/g, m => map[m]) : '';
 }
+</script>
+{{end}}
+
+{{define "bottom_js"}}
+<script>
+    // Page-specific JavaScript for Interfaces
+    $(document).ready(function() {
+        loadInterfaces();
+    });
 </script>
 {{end}}
