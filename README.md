@@ -213,9 +213,16 @@ PublicKey = <friend_public_key>
 
 #### Important Notes:
 
-- **Private Key Security**: The private key in your friend's config should be kept on YOUR server only. Don't share it.
+- **Private Key**: Your server uses the private key configured in **Wireguard Server** settings for the wg0 interface. You DON'T need to enter a private key when adding an external server - your existing interface private key is used automatically. The private key shown in your friend's config is just for reference about what key THEY expect you to use, but your server already has its own private key configured.
+  
+- **Public Key**: The public key you enter in the "Public and Preshared Keys" section is YOUR FRIEND'S public key (from their `[Peer]` section of the config they manage), NOT your private key.
+
+- **How it works**: When you add your friend's server as a "client" in the UI, you're actually adding a [Peer] section to your wg0.conf. Your server connects TO their endpoint using your server's existing private key. No additional private key is needed.
+
 - **DNS Settings**: DNS from the friend's config is managed in **Wireguard Server** → **DNS Servers** settings, not per-client.
+
 - **MTU**: Set MTU in **Wireguard Server** settings if needed (default 1420 is usually fine).
+
 - **Persistent Keepalive**: Can be configured in **Additional configuration** section of the client edit dialog.
 
 #### Verifying the Connection:
