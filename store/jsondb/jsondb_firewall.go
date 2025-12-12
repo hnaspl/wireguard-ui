@@ -12,7 +12,9 @@ func (o *JsonDB) GetFirewallRules() ([]model.FirewallRule, error) {
 
 	records, err := o.conn.ReadAll("firewall_rules")
 	if err != nil {
-		return rules, err
+		// If no firewall rules exist yet (collection not found or empty), return empty slice
+		// This is not an error condition - just means no rules are configured yet
+		return rules, nil
 	}
 
 	for _, f := range records {

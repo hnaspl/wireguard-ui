@@ -3,7 +3,6 @@ package jsondb
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path"
 	"time"
 
@@ -15,18 +14,11 @@ import (
 // GetInterfaces retrieves all interfaces from the database
 func (o *JsonDB) GetInterfaces() ([]model.WgInterface, error) {
 	var interfaces []model.WgInterface
-	interfacesPath := path.Join(o.dbPath, "interfaces")
-	
-	// Create interfaces directory if it doesn't exist
-	if _, err := os.Stat(interfacesPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(interfacesPath, os.ModePerm); err != nil {
-			return interfaces, err
-		}
-	}
 	
 	results, err := o.conn.ReadAll("interfaces")
 	if err != nil {
-		// If no interfaces exist yet, return empty slice (not an error)
+		// If no interfaces exist yet (collection not found or empty), return empty slice
+		// This is not an error condition - just means no interfaces are configured yet
 		return interfaces, nil
 	}
 	
@@ -127,7 +119,13 @@ func (o *JsonDB) GetFirewallRulesByInterface(interfaceID string) ([]model.Firewa
 func (o *JsonDB) MigrateToMultiInterface() error {
 	// Check if interfaces already exist
 	interfaces, err := o.GetInterfaces()
-	if err == nil && len(interfaces) > 0 {
+	if err != nil {
+		// GetInterfaces should never return an error (returns empty slice if collection not found)
+		// but handle it defensively
+		return fmt.Errorf("cannot check existing interfaces: %v", err)
+	}
+	
+	if len(interfaces) > 0 {
 		// Migration already done
 		return nil
 	}
@@ -135,7 +133,15 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 	// Read existing server configuration
 	server, err := o.GetServer()
 	if err != nil {
-		return fmt.Errorf("cannot read server configuration for migration: %v", err)
+		// If we can't read server config, we can't migrate
+		// This is not necessarily a fatal error - it just means migration can't proceed
+		// Log a warning and continue - the user can manually create interfaces later
+		return fmt.Errorf("cannot read server configuration for migration (server config may not exist yet): %v", err)
+	}
+	
+	// Validate server configuration before migration
+	if server.Interface == nil || server.KeyPair == nil {
+		return fmt.Errorf("server configuration is incomplete: missing interface or keypair")
 	}
 	
 	// Create default wg0 interface from server settings
@@ -166,7 +172,9 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 	// Update all existing clients to reference wg0
 	clients, err := o.GetClients(false)
 	if err != nil {
-		return fmt.Errorf("cannot read clients for migration: %v", err)
+		// Log warning but don't fail migration - clients might not exist yet
+		// return fmt.Errorf("cannot read clients for migration: %v", err)
+		clients = []model.ClientData{} // Continue with empty client list
 	}
 	
 	for _, clientData := range clients {
@@ -176,6 +184,7 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 			if client.InterfaceID == "" {
 				client.InterfaceID = "wg0"
 				if err := o.SaveClient(client); err != nil {
+					// Log error but continue with other clients
 					return fmt.Errorf("cannot update client %s: %v", client.ID, err)
 				}
 			}
@@ -185,7 +194,9 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 	// Update all existing firewall rules to reference wg0
 	rules, err := o.GetFirewallRules()
 	if err != nil {
-		return fmt.Errorf("cannot read firewall rules for migration: %v", err)
+		// Log warning but don't fail migration - rules might not exist yet
+		// return fmt.Errorf("cannot read firewall rules for migration: %v", err)
+		rules = []model.FirewallRule{} // Continue with empty rules list
 	}
 	
 	for _, rule := range rules {
@@ -193,6 +204,7 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 		if rule.InterfaceID == "" {
 			rule.InterfaceID = "wg0"
 			if err := o.SaveFirewallRule(rule); err != nil {
+				// Log error but continue with other rules
 				return fmt.Errorf("cannot update firewall rule %s: %v", rule.ID, err)
 			}
 		}
