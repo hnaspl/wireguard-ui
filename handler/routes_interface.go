@@ -228,10 +228,7 @@ func DeleteInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
-		// Stop the interface if it's running
-		util.StopInterface(interfaceID)
-
-		// Delete the WireGuard config file
+		// Delete the WireGuard config file (this will stop the interface via init.sh monitoring)
 		configPath := fmt.Sprintf("/etc/wireguard/%s.conf", interfaceID)
 		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
 			log.Warnf("Failed to remove config file %s: %v", configPath, err)
