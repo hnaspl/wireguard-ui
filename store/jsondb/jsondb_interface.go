@@ -6,6 +6,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/labstack/gommon/log"
 	"github.com/ngoduykhanh/wireguard-ui/model"
 	"github.com/ngoduykhanh/wireguard-ui/util"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
@@ -184,8 +185,8 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 			if client.InterfaceID == "" {
 				client.InterfaceID = "wg0"
 				if err := o.SaveClient(client); err != nil {
-					// Log error but continue with other clients
-					return fmt.Errorf("cannot update client %s: %v", client.ID, err)
+					// Log error but continue with other clients to make migration more resilient
+					log.Warnf("Cannot update client %s during migration: %v (continuing with other clients)", client.ID, err)
 				}
 			}
 		}
@@ -204,8 +205,8 @@ func (o *JsonDB) MigrateToMultiInterface() error {
 		if rule.InterfaceID == "" {
 			rule.InterfaceID = "wg0"
 			if err := o.SaveFirewallRule(rule); err != nil {
-				// Log error but continue with other rules
-				return fmt.Errorf("cannot update firewall rule %s: %v", rule.ID, err)
+				// Log error but continue with other rules to make migration more resilient
+				log.Warnf("Cannot update firewall rule %s during migration: %v (continuing with other rules)", rule.ID, err)
 			}
 		}
 	}
