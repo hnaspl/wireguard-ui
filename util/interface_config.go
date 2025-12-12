@@ -70,6 +70,7 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 	}
 
 	// Determine script paths for this interface
+	// Note: configDir is already declared on line 21
 	configDir = filepath.Dir(iface.ConfigFilePath)
 	if configDir == "" || configDir == "." {
 		configDir = "/etc/wireguard"
@@ -88,6 +89,7 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 	}
 
 	// Build server config from interface for template compatibility
+	// PostUp/PostDown are file paths (not script content) - they're written to WireGuard config
 	serverConfig := model.Server{
 		KeyPair: &model.ServerKeypair{
 			PrivateKey: iface.PrivateKey,
