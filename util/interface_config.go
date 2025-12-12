@@ -69,6 +69,24 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 		return err
 	}
 
+	// Determine script paths for this interface
+	configDir = filepath.Dir(iface.ConfigFilePath)
+	if configDir == "" || configDir == "." {
+		configDir = "/etc/wireguard"
+	}
+	postUpPath := filepath.Join(configDir, iface.ID+"-postup.sh")
+	postDownPath := filepath.Join(configDir, iface.ID+"-postdown.sh")
+	
+	// For default interface, use global paths if configured
+	if iface.IsDefault {
+		if globalSettings.PostUpScriptPath != "" {
+			postUpPath = globalSettings.PostUpScriptPath
+		}
+		if globalSettings.PostDownScriptPath != "" {
+			postDownPath = globalSettings.PostDownScriptPath
+		}
+	}
+
 	// Build server config from interface for template compatibility
 	serverConfig := model.Server{
 		KeyPair: &model.ServerKeypair{
@@ -78,8 +96,8 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 		Interface: &model.ServerInterface{
 			Addresses:  iface.InterfaceAddresses,
 			ListenPort: iface.ListenPort,
-			PostUp:     iface.PostUpScript,
-			PostDown:   iface.PostDownScript,
+			PostUp:     postUpPath,
+			PostDown:   postDownPath,
 		},
 	}
 
