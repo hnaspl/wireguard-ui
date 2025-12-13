@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/labstack/gommon/log"
 	"github.com/ngoduykhanh/wireguard-ui/model"
@@ -321,10 +322,32 @@ func RestartInterface(interfaceID string) error {
 		return fmt.Errorf("config file does not exist: %s", confPath)
 	}
 	
-	// Stop the interface (ignore errors if already stopped)
-	log.Infof("Stopping interface %s", interfaceID)
-	stopCmd := exec.Command("wg-quick", "down", confPath)
-	stopCmd.Run() // Ignore error - interface may not be running
+	// Check if interface is currently running
+	checkCmd := exec.Command("wg", "show", interfaceID)
+	isRunning := checkCmd.Run() == nil
+	
+	if isRunning {
+		// Stop the interface
+		log.Infof("Stopping interface %s", interfaceID)
+		stopCmd := exec.Command("wg-quick", "down", confPath)
+		stopCmd.Stdout = os.Stdout
+		stopCmd.Stderr = os.Stderr
+		if err := stopCmd.Run(); err != nil {
+			log.Warnf("Error stopping interface %s: %v", interfaceID, err)
+		}
+		
+		// Give it a moment to fully stop
+		time.Sleep(500 * time.Millisecond)
+	}
+	
+	// Verify interface is down before starting
+	checkCmd = exec.Command("wg", "show", interfaceID)
+	if checkCmd.Run() == nil {
+		// Interface still exists, force remove it
+		log.Warnf("Interface %s still exists after stop, forcing down", interfaceID)
+		exec.Command("ip", "link", "delete", interfaceID).Run()
+		time.Sleep(200 * time.Millisecond)
+	}
 	
 	// Start the interface
 	log.Infof("Starting interface %s", interfaceID)
