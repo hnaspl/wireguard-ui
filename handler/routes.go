@@ -750,6 +750,8 @@ func UpdateClient(db store.IStore) echo.HandlerFunc {
 		client.Endpoint = _client.Endpoint
 		client.PublicKey = _client.PublicKey
 		client.PresharedKey = _client.PresharedKey
+		client.AllowWebAccess = _client.AllowWebAccess
+		client.AllowDNSAccess = _client.AllowDNSAccess
 		client.UpdatedAt = time.Now().UTC()
 		client.AdditionalNotes = strings.ReplaceAll(strings.Trim(_client.AdditionalNotes, "\r\n"), "\r\n", "\n")
 
