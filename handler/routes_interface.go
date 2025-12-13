@@ -14,6 +14,7 @@ import (
 
 	"github.com/ngoduykhanh/wireguard-ui/model"
 	"github.com/ngoduykhanh/wireguard-ui/store"
+	"github.com/ngoduykhanh/wireguard-ui/templates"
 	"github.com/ngoduykhanh/wireguard-ui/util"
 )
 
@@ -136,7 +137,7 @@ func CreateInterface(db store.IStore) echo.HandlerFunc {
 		}
 
 		// Generate config and scripts immediately after creating interface
-		if err := util.ApplyInterfaceConfig(db, nil, iface.ID); err != nil {
+		if err := util.ApplyInterfaceConfig(db, templates.Templates, iface.ID); err != nil {
 			log.Error("Cannot generate config for new interface: ", err)
 			// Don't fail the request, just log the error
 			// Interface is created, but scripts need manual generation
@@ -211,7 +212,7 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 		}
 
 		// Regenerate config and scripts immediately after updating interface
-		if err := util.ApplyInterfaceConfig(db, nil, iface.ID); err != nil {
+		if err := util.ApplyInterfaceConfig(db, templates.Templates, iface.ID); err != nil {
 			log.Error("Cannot regenerate config for updated interface: ", err)
 			// Don't fail the request, just log the error
 			// Interface is updated, but scripts need manual regeneration
