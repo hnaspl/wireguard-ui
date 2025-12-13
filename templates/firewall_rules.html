@@ -216,20 +216,28 @@ Firewall Rules Management
                 $('#n_interface_id option').remove();
                 $('#e_interface_id option').remove();
                 
+                // Filter: only show server-type interfaces (client-type interfaces don't use firewall rules)
+                const serverInterfaces = data.filter(function(iface) {
+                    return iface.enabled && iface.type === 'server';
+                });
+                
                 // Sort interfaces: wg0 first, then others alphabetically
-                data.sort(function(a, b) {
+                serverInterfaces.sort(function(a, b) {
                     if (a.id === 'wg0') return -1;
                     if (b.id === 'wg0') return 1;
                     return a.id.localeCompare(b.id);
                 });
                 
-                $.each(data, function(index, iface) {
-                    if (iface.enabled) {
-                        const label = iface.name + ' (' + iface.id + ')';
-                        $('#n_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
-                        $('#e_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
-                    }
+                $.each(serverInterfaces, function(index, iface) {
+                    const label = iface.name + ' (' + iface.id + ')';
+                    $('#n_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
+                    $('#e_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
                 });
+                
+                if (serverInterfaces.length === 0) {
+                    $('#n_interface_id').append($("<option></option>").attr("value", "").text("No server interfaces available"));
+                    $('#e_interface_id').append($("<option></option>").attr("value", "").text("No server interfaces available"));
+                }
             },
             error: function (jqXHR, exception) {
                 const responseJson = jQuery.parseJSON(jqXHR.responseText);
