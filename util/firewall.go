@@ -158,6 +158,11 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 	script.WriteString("set -eu\n\n")
 	script.WriteString(fmt.Sprintf("WG_IF=\"%s\"\n", wgIf))
 	
+	// For client-type interfaces, only generate inter-interface routing rules
+	if iface != nil && iface.Type == model.WgInterfaceTypeClient {
+		return generateClientPostUpScript(wgIf, iface, allInterfaces)
+	}
+	
 	// Set defaults matching user's script
 	// wgSubnets is now calculated from server interface addresses
 	if wgSubnets == "" {
@@ -343,6 +348,11 @@ func GeneratePostDownScriptWithRouting(globalSettings model.GlobalSetting, wgSub
 	script.WriteString("set -eu\n\n")
 	script.WriteString(fmt.Sprintf("WG_IF=\"%s\"\n", wgIf))
 	
+	// For client-type interfaces, only generate inter-interface routing rules cleanup
+	if iface != nil && iface.Type == model.WgInterfaceTypeClient {
+		return generateClientPostDownScript(wgIf, iface, allInterfaces)
+	}
+	
 	// Set defaults matching user's script
 	// wgSubnets is now calculated from server interface addresses
 	if wgSubnets == "" {
@@ -476,6 +486,121 @@ func GeneratePostUpScript(globalSettings model.GlobalSetting, wgSubnets string, 
 // GeneratePostDownScript is a backward-compatible wrapper  
 func GeneratePostDownScript(globalSettings model.GlobalSetting, wgSubnets string, firewallRules []model.FirewallRule, clients []model.ClientData, interfaceName string) string {
 	return GeneratePostDownScriptWithRouting(globalSettings, wgSubnets, firewallRules, clients, interfaceName, nil, nil)
+}
+
+// generateClientPostUpScript generates a simplified PostUp script for client-type interfaces
+// Only includes inter-interface routing rules, not the full server-style firewall
+func generateClientPostUpScript(wgIf string, iface *model.WgInterface, allInterfaces []model.WgInterface) string {
+	var script strings.Builder
+	
+	script.WriteString("#!/bin/sh\n")
+	script.WriteString("set -eu\n\n")
+	script.WriteString(fmt.Sprintf("WG_IF=\"%s\"\n", wgIf))
+	script.WriteString("IPT=\"$(command -v iptables || echo iptables)\"\n\n")
+	
+	script.WriteString("echo \"[postup] Client interface $WG_IF starting up\"\n\n")
+	
+	// Only add inter-interface routing rules if configured
+	if iface != nil && len(iface.RemoteNetworks) > 0 {
+		script.WriteString("# --- INTER-INTERFACE ROUTING ---\n")
+		script.WriteString(fmt.Sprintf("# Remote networks accessible via %s: %s\n", wgIf, strings.Join(iface.RemoteNetworks, ", ")))
+		script.WriteString("\n")
+
+		// Allow traffic from LAN to remote networks via this interface
+		for _, remoteNet := range iface.RemoteNetworks {
+			script.WriteString(fmt.Sprintf("# Allow LAN/macvlan -> %s to %s\n", wgIf, remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -C FORWARD -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || \\\n", remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -I FORWARD 1 -o \"$WG_IF\" -d %s -j ACCEPT\n", remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \\\n"))
+			script.WriteString(fmt.Sprintf("$IPT -I FORWARD 1 -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT\n\n"))
+		}
+
+		// Allow traffic from other allowed interfaces to remote networks via this interface
+		if len(iface.AllowedInterfaces) > 0 {
+			// Build map of interface IDs to names for lookup
+			ifaceMap := make(map[string]string)
+			for _, otherIface := range allInterfaces {
+				ifaceMap[otherIface.ID] = otherIface.ID
+			}
+
+			for _, allowedIfaceID := range iface.AllowedInterfaces {
+				if _, exists := ifaceMap[allowedIfaceID]; !exists {
+					continue // Skip if interface doesn't exist
+				}
+
+				for _, remoteNet := range iface.RemoteNetworks {
+					script.WriteString(fmt.Sprintf("# Allow %s -> %s to reach %s\n", allowedIfaceID, wgIf, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i %s -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || \\\n", allowedIfaceID, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -I FORWARD 1 -i %s -o \"$WG_IF\" -d %s -j ACCEPT\n", allowedIfaceID, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \\\n", allowedIfaceID))
+					script.WriteString(fmt.Sprintf("$IPT -I FORWARD 1 -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT\n\n", allowedIfaceID))
+				}
+			}
+		}
+
+		// Add SNAT/MASQUERADE if enabled
+		if iface.EnableSNAT {
+			script.WriteString(fmt.Sprintf("# SNAT out of %s so remote sees traffic from interface IP (no extra routes needed on their LAN)\n", wgIf))
+			script.WriteString(fmt.Sprintf("$IPT -t nat -C POSTROUTING -o \"$WG_IF\" -j MASQUERADE 2>/dev/null || \\\n"))
+			script.WriteString(fmt.Sprintf("$IPT -t nat -A POSTROUTING -o \"$WG_IF\" -j MASQUERADE\n\n"))
+		}
+	}
+	
+	script.WriteString("echo \"[postup] Client interface $WG_IF configured\"\n")
+	
+	return script.String()
+}
+
+// generateClientPostDownScript generates a simplified PostDown script for client-type interfaces  
+func generateClientPostDownScript(wgIf string, iface *model.WgInterface, allInterfaces []model.WgInterface) string {
+	var script strings.Builder
+	
+	script.WriteString("#!/bin/sh\n")
+	script.WriteString("set -eu\n\n")
+	script.WriteString(fmt.Sprintf("WG_IF=\"%s\"\n", wgIf))
+	script.WriteString("IPT=\"$(command -v iptables || echo iptables)\"\n\n")
+	
+	script.WriteString("echo \"[postdown] Client interface $WG_IF shutting down\"\n\n")
+	
+	// Remove inter-interface routing rules if configured
+	if iface != nil && len(iface.RemoteNetworks) > 0 {
+		script.WriteString("# Remove inter-interface routing rules\n")
+
+		// Remove SNAT if it was enabled
+		if iface.EnableSNAT {
+			script.WriteString(fmt.Sprintf("$IPT -t nat -D POSTROUTING -o \"$WG_IF\" -j MASQUERADE 2>/dev/null || true\n\n"))
+		}
+
+		// Remove traffic rules from other allowed interfaces
+		if len(iface.AllowedInterfaces) > 0 {
+			ifaceMap := make(map[string]string)
+			for _, otherIface := range allInterfaces {
+				ifaceMap[otherIface.ID] = otherIface.ID
+			}
+
+			for _, allowedIfaceID := range iface.AllowedInterfaces {
+				if _, exists := ifaceMap[allowedIfaceID]; !exists {
+					continue
+				}
+
+				for _, remoteNet := range iface.RemoteNetworks {
+					script.WriteString(fmt.Sprintf("$IPT -D FORWARD -i %s -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || true\n", allowedIfaceID, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -D FORWARD -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true\n", allowedIfaceID))
+				}
+			}
+		}
+
+		// Remove LAN to remote networks rules
+		for _, remoteNet := range iface.RemoteNetworks {
+			script.WriteString(fmt.Sprintf("$IPT -D FORWARD -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || true\n", remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -D FORWARD -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true\n"))
+		}
+		script.WriteString("\n")
+	}
+	
+	script.WriteString("echo \"[postdown] Client interface $WG_IF cleaned up\"\n")
+	
+	return script.String()
 }
 
 // GenerateAndSaveScripts generates and saves PostUp/PostDown scripts to disk

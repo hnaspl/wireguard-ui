@@ -163,16 +163,21 @@ func writeClientInterfaceConfig(f *os.File, iface model.WgInterface) error {
 		config.WriteString(fmt.Sprintf("MTU = %d\n", iface.MTU))
 	}
 	
-	// PostUp/PostDown if configured
-	if iface.PostUpScript != "" {
-		postUpPath := filepath.Dir(iface.ConfigFilePath) + "/" + iface.ID + "-postup.sh"
-		config.WriteString("PostUp = " + postUpPath + "\n")
+	// Table directive for client interfaces
+	if iface.Table != "" {
+		config.WriteString("Table = " + iface.Table + "\n")
 	}
 	
-	if iface.PostDownScript != "" {
-		postDownPath := filepath.Dir(iface.ConfigFilePath) + "/" + iface.ID + "-postdown.sh"
-		config.WriteString("PostDown = " + postDownPath + "\n")
+	// PostUp/PostDown - always add for client interfaces to support inter-interface routing
+	configDir := filepath.Dir(iface.ConfigFilePath)
+	if configDir == "" || configDir == "." {
+		configDir = "/etc/wireguard"
 	}
+	postUpPath := filepath.Join(configDir, iface.ID+"-postup.sh")
+	postDownPath := filepath.Join(configDir, iface.ID+"-postdown.sh")
+	
+	config.WriteString("PostUp = " + postUpPath + "\n")
+	config.WriteString("PostDown = " + postDownPath + "\n")
 	
 	// Peer section
 	config.WriteString("\n[Peer]\n")
