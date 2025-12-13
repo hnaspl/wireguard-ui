@@ -30,6 +30,11 @@ type WgInterface struct {
 	PeerEndpoint            string   `json:"peer_endpoint,omitempty"`             // Remote server endpoint (host:port)
 	PeerAllowedIPs          []string `json:"peer_allowed_ips,omitempty"`          // Routes through this peer
 	PeerPersistentKeepalive int      `json:"peer_persistent_keepalive,omitempty"` // Keepalive interval
+
+	// Advanced routing configuration
+	AllowedInterfaces []string `json:"allowed_interfaces,omitempty"` // Interface IDs that can forward traffic to this interface
+	RemoteNetworks    []string `json:"remote_networks,omitempty"`    // Networks reachable through this interface (CIDR notation)
+	EnableSNAT        bool     `json:"enable_snat,omitempty"`        // Enable SNAT/MASQUERADE for RemoteNetworks
 }
 
 // WgInterfaceType constants

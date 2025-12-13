@@ -188,17 +188,24 @@ func writeClientInterfaceConfig(f *os.File, iface model.WgInterface) error {
 }
 
 // GenerateAndSaveInterfaceScripts generates and saves PostUp/PostDown scripts for a specific interface
-func GenerateAndSaveInterfaceScripts(interfaceID string, iface model.WgInterface, 
+func GenerateAndSaveInterfaceScripts(db store.IStore, interfaceID string, iface model.WgInterface, 
 	globalSettings model.GlobalSetting, firewallRules []model.FirewallRule, clients []model.ClientData) error {
 	
 	// Calculate WG_SUBNETS from interface addresses
 	wgSubnets := strings.Join(iface.InterfaceAddresses, ",")
 
-	// Generate PostUp script
-	postUpScript := GeneratePostUpScript(globalSettings, wgSubnets, firewallRules, clients, interfaceID)
+	// Get all interfaces for inter-interface routing
+	allInterfaces, err := db.GetInterfaces()
+	if err != nil {
+		log.Warnf("Cannot get all interfaces for routing config: %v", err)
+		allInterfaces = []model.WgInterface{}
+	}
+
+	// Generate PostUp script with routing support
+	postUpScript := GeneratePostUpScriptWithRouting(globalSettings, wgSubnets, firewallRules, clients, interfaceID, &iface, allInterfaces)
 	
-	// Generate PostDown script
-	postDownScript := GeneratePostDownScript(globalSettings, wgSubnets, firewallRules, clients, interfaceID)
+	// Generate PostDown script with routing support
+	postDownScript := GeneratePostDownScriptWithRouting(globalSettings, wgSubnets, firewallRules, clients, interfaceID, &iface, allInterfaces)
 
 	// Determine script paths - use interface-specific paths
 	configDir := filepath.Dir(iface.ConfigFilePath)
@@ -273,7 +280,7 @@ func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) er
 	}
 
 	// Generate and save scripts
-	if err := GenerateAndSaveInterfaceScripts(interfaceID, iface, settings, firewallRules, clients); err != nil {
+	if err := GenerateAndSaveInterfaceScripts(db, interfaceID, iface, settings, firewallRules, clients); err != nil {
 		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
 	}
 
