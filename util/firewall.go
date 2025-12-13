@@ -65,7 +65,18 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 			// Add port if not "any"
 			if rule.AllowedPort != "any" && rule.AllowedPort != "" {
 				if rule.Protocol == "tcp" || rule.Protocol == "udp" {
-					ruleCmd += fmt.Sprintf(" --dport %s", rule.AllowedPort)
+					// Remove spaces after commas for port lists
+					ports := strings.ReplaceAll(rule.AllowedPort, ", ", ",")
+					ports = strings.ReplaceAll(ports, " ", "")
+					
+					// Check if multiple ports (contains comma)
+					if strings.Contains(ports, ",") {
+						// Multiple ports require multiport module
+						ruleCmd += fmt.Sprintf(" -m multiport --dports %s", ports)
+					} else {
+						// Single port
+						ruleCmd += fmt.Sprintf(" --dport %s", ports)
+					}
 				}
 			}
 
