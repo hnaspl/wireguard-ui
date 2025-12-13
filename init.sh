@@ -32,6 +32,14 @@ get_enabled_interfaces() {
     printf '%s\n' "${configs[@]}"
 }
 
+# Start the application in background FIRST to generate scripts
+echo "Starting wireguard-ui application to generate configurations..."
+./wg-ui &
+WG_UI_PID=$!
+
+# Give the application a moment to initialize and generate scripts
+sleep 3
+
 # manage wireguard stop/start with the container
 case $WGUI_MANAGE_START in (1|t|T|true|True|TRUE)
     # Start all enabled interfaces
@@ -65,5 +73,5 @@ case $WGUI_MANAGE_RESTART in (1|t|T|true|True|TRUE)
 esac
 
 
-./wg-ui &
-wait $!
+wait $WG_UI_PID
+
