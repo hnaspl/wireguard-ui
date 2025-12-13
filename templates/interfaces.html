@@ -547,26 +547,6 @@ function deleteInterface(id) {
     });
 }
 
-<!-- Interface Details Modal -->
-<div class="modal fade" id="interfaceDetailsModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h4 class="modal-title" id="detailsModalTitle">Interface Details</h4>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body" id="detailsModalBody">
-                <!-- Details will be populated here -->
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 function viewInterfaceDetails(id, type) {
     if (type === 'server') {
         // Navigate to clients page (filtered by this interface)
@@ -659,6 +639,26 @@ function escapeHtml(text) {
     return text ? text.replace(/[&<>"']/g, m => map[m]) : '';
 }
 </script>
+
+<!-- Interface Details Modal -->
+<div class="modal fade" id="interfaceDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="detailsModalTitle">Interface Details</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="detailsModalBody">
+                <!-- Details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {{end}}
 
 {{define "bottom_js"}}
