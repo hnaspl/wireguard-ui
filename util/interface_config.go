@@ -76,17 +76,26 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 	if configDir == "" || configDir == "." {
 		configDir = "/etc/wireguard"
 	}
-	postUpPath := filepath.Join(configDir, iface.ID+"-postup.sh")
-	postDownPath := filepath.Join(configDir, iface.ID+"-postdown.sh")
 	
-	// For default interface, use global paths if configured
-	if iface.IsDefault {
+	// For wg0 (default interface), use standard postup.sh/postdown.sh names
+	// For other interfaces, use interface-specific names
+	var postUpPath, postDownPath string
+	if iface.ID == "wg0" || iface.IsDefault {
+		// Use default/global script names for wg0 to avoid confusion
 		if globalSettings.PostUpScriptPath != "" {
 			postUpPath = globalSettings.PostUpScriptPath
+		} else {
+			postUpPath = filepath.Join(configDir, "postup.sh")
 		}
 		if globalSettings.PostDownScriptPath != "" {
 			postDownPath = globalSettings.PostDownScriptPath
+		} else {
+			postDownPath = filepath.Join(configDir, "postdown.sh")
 		}
+	} else {
+		// Use interface-specific script names for non-default interfaces
+		postUpPath = filepath.Join(configDir, iface.ID+"-postup.sh")
+		postDownPath = filepath.Join(configDir, iface.ID+"-postdown.sh")
 	}
 
 	// Build server config from interface for template compatibility
@@ -208,23 +217,31 @@ func GenerateAndSaveInterfaceScripts(db store.IStore, interfaceID string, iface 
 	// Generate PostDown script with routing support
 	postDownScript := GeneratePostDownScriptWithRouting(globalSettings, wgSubnets, firewallRules, clients, interfaceID, &iface, allInterfaces)
 
-	// Determine script paths - use interface-specific paths
+	// Determine script paths - use interface-specific paths for non-default interfaces
 	configDir := filepath.Dir(iface.ConfigFilePath)
 	if configDir == "" || configDir == "." {
 		configDir = "/etc/wireguard"
 	}
 
-	postUpPath := filepath.Join(configDir, interfaceID+"-postup.sh")
-	postDownPath := filepath.Join(configDir, interfaceID+"-postdown.sh")
-
-	// If global settings specify custom paths and this is the default interface, use those
-	if iface.IsDefault {
+	// For wg0 (default interface), use standard postup.sh/postdown.sh names
+	// For other interfaces, use interface-specific names
+	var postUpPath, postDownPath string
+	if interfaceID == "wg0" || iface.IsDefault {
+		// Use default/global script names for wg0 to avoid confusion with existing setup
 		if globalSettings.PostUpScriptPath != "" {
 			postUpPath = globalSettings.PostUpScriptPath
+		} else {
+			postUpPath = filepath.Join(configDir, "postup.sh")
 		}
 		if globalSettings.PostDownScriptPath != "" {
 			postDownPath = globalSettings.PostDownScriptPath
+		} else {
+			postDownPath = filepath.Join(configDir, "postdown.sh")
 		}
+	} else {
+		// Use interface-specific script names for non-default interfaces
+		postUpPath = filepath.Join(configDir, interfaceID+"-postup.sh")
+		postDownPath = filepath.Join(configDir, interfaceID+"-postdown.sh")
 	}
 
 	// Write PostUp script

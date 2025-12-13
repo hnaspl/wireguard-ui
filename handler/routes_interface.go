@@ -186,6 +186,14 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 			iface.PublicKey = existingIface.PublicKey
 		}
 
+		// Set default config file path if not provided
+		if iface.ConfigFilePath == "" {
+			iface.ConfigFilePath = "/etc/wireguard/" + interfaceID + ".conf"
+		}
+		
+		// Preserve is_default flag
+		iface.IsDefault = existingIface.IsDefault
+
 		// Update timestamp
 		iface.Updated = time.Now().UTC()
 
