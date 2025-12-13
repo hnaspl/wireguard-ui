@@ -341,22 +341,27 @@ func RestartInterface(interfaceID string) error {
 		// Give it more time to fully stop and release resources
 		time.Sleep(1 * time.Second)
 		
-		// Verify interface is down
+		// Verify interface is down with retries
+		stillExists := false
 		for i := 0; i < 3; i++ {
 			checkCmd = exec.Command("wg", "show", interfaceID)
 			if checkCmd.Run() != nil {
 				// Interface is down
+				stillExists = false
 				break
 			}
 			// Still exists, wait a bit more
+			stillExists = true
 			time.Sleep(500 * time.Millisecond)
 		}
 		
 		// If still exists after multiple checks, force remove it
-		checkCmd = exec.Command("wg", "show", interfaceID)
-		if checkCmd.Run() == nil {
+		if stillExists {
 			log.Warnf("Interface %s still exists after stop, forcing down", interfaceID)
-			exec.Command("ip", "link", "delete", interfaceID).Run()
+			forceCmd := exec.Command("ip", "link", "delete", interfaceID)
+			if err := forceCmd.Run(); err != nil {
+				log.Warnf("Failed to force delete interface %s: %v", interfaceID, err)
+			}
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
