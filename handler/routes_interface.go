@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -228,8 +229,15 @@ func DeleteInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
-		// Delete the WireGuard config file (this will stop the interface via init.sh monitoring)
+		// Try to stop the interface gracefully before deleting files
 		configPath := fmt.Sprintf("/etc/wireguard/%s.conf", interfaceID)
+		cmd := exec.Command("wg-quick", "down", configPath)
+		if err := cmd.Run(); err != nil {
+			// Interface might not be running, that's okay
+			log.Debugf("Could not stop interface %s (may not be running): %v", interfaceID, err)
+		}
+
+		// Delete the WireGuard config file
 		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
 			log.Warnf("Failed to remove config file %s: %v", configPath, err)
 		}
