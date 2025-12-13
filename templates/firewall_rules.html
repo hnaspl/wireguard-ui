@@ -364,6 +364,8 @@ Firewall Rules Management
                     $('#frm_new_rule')[0].reset();
                     toastr.success('Firewall rule added successfully');
                     loadFirewallRules();
+                    // Show the Apply Config button
+                    $("#apply-config-button").show();
                 },
                 error: function(jqXHR, exception) {
                     const responseJson = jQuery.parseJSON(jqXHR.responseText);
@@ -397,6 +399,8 @@ Firewall Rules Management
                     $('#modal_edit_rule').modal('hide');
                     toastr.success('Firewall rule updated successfully');
                     loadFirewallRules();
+                    // Show the Apply Config button
+                    $("#apply-config-button").show();
                 },
                 error: function(jqXHR, exception) {
                     const responseJson = jQuery.parseJSON(jqXHR.responseText);

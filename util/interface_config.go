@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
@@ -284,6 +285,40 @@ func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) er
 		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
 	}
 
+	// Restart the interface to apply changes
+	if iface.Enabled {
+		if err := RestartInterface(interfaceID); err != nil {
+			log.Warnf("Failed to restart interface %s (may not be critical): %v", interfaceID, err)
+		}
+	}
+
+	return nil
+}
+
+// RestartInterface restarts a WireGuard interface
+func RestartInterface(interfaceID string) error {
+	confPath := filepath.Join("/etc/wireguard", interfaceID+".conf")
+	
+	// Check if config file exists
+	if _, err := os.Stat(confPath); os.IsNotExist(err) {
+		return fmt.Errorf("config file does not exist: %s", confPath)
+	}
+	
+	// Stop the interface (ignore errors if already stopped)
+	log.Infof("Stopping interface %s", interfaceID)
+	stopCmd := exec.Command("wg-quick", "down", confPath)
+	stopCmd.Run() // Ignore error - interface may not be running
+	
+	// Start the interface
+	log.Infof("Starting interface %s", interfaceID)
+	startCmd := exec.Command("wg-quick", "up", confPath)
+	startCmd.Stdout = os.Stdout
+	startCmd.Stderr = os.Stderr
+	if err := startCmd.Run(); err != nil {
+		return fmt.Errorf("failed to start interface: %v", err)
+	}
+	
+	log.Infof("Successfully restarted interface %s", interfaceID)
 	return nil
 }
 
