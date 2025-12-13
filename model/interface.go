@@ -35,6 +35,10 @@ type WgInterface struct {
 	AllowedInterfaces []string `json:"allowed_interfaces,omitempty"` // Interface IDs that can forward traffic to this interface
 	RemoteNetworks    []string `json:"remote_networks,omitempty"`    // Networks reachable through this interface (CIDR notation)
 	EnableSNAT        bool     `json:"enable_snat,omitempty"`        // Enable SNAT/MASQUERADE for RemoteNetworks
+	
+	// Client access control (for server interfaces with clients)
+	AllowWebAccess bool `json:"allow_web_access,omitempty"` // Allow HTTP/HTTPS (80, 443) regardless of firewall rules
+	AllowDNSAccess bool `json:"allow_dns_access,omitempty"` // Allow DNS (53) regardless of firewall rules
 }
 
 // WgInterfaceType constants

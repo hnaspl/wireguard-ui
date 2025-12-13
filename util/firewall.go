@@ -11,7 +11,7 @@ import (
 // GenerateFirewallRules generates iptables commands from UI firewall rules
 // These are inserted AFTER established/related and protected IP rules
 // Returns: accept rules, drop rules for restricted clients, list of restricted client IPs
-func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.ClientData, action string) (string, string, []string) {
+func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.ClientData, action string, iface *model.WgInterface) (string, string, []string) {
 	if len(firewallRules) == 0 {
 		return "", "", []string{}
 	}
@@ -25,6 +25,53 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 	for _, clientData := range clients {
 		if clientData.Client != nil && clientData.Client.Enabled {
 			clientIPMap[clientData.Client.ID] = clientData.Client.AllocatedIPs
+		}
+	}
+	
+	// Add automatic web and DNS access rules if interface has these flags enabled
+	if iface != nil {
+		if iface.AllowWebAccess {
+			// Allow HTTP and HTTPS for all clients
+			var cmd string
+			if action == "add" {
+				cmd = "$IPT -I FORWARD 1"
+			} else {
+				cmd = "$IPT -D FORWARD"
+			}
+			
+			webHTTPRule := fmt.Sprintf("%s -i \"$WG_IF\" -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT", cmd)
+			webHTTPSRule := fmt.Sprintf("%s -i \"$WG_IF\" -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT", cmd)
+			
+			if action == "add" {
+				acceptRules = append(acceptRules, 
+					fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \\\n%s", webHTTPRule),
+					fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \\\n%s", webHTTPSRule),
+				)
+			} else {
+				acceptRules = append(acceptRules, webHTTPRule+" 2>/dev/null || true", webHTTPSRule+" 2>/dev/null || true")
+			}
+		}
+		
+		if iface.AllowDNSAccess {
+			// Allow DNS UDP and TCP for all clients
+			var cmd string
+			if action == "add" {
+				cmd = "$IPT -I FORWARD 1"
+			} else {
+				cmd = "$IPT -D FORWARD"
+			}
+			
+			dnsUDPRule := fmt.Sprintf("%s -i \"$WG_IF\" -p udp --dport 53 -m conntrack --ctstate NEW -j ACCEPT", cmd)
+			dnsTCPRule := fmt.Sprintf("%s -i \"$WG_IF\" -p tcp --dport 53 -m conntrack --ctstate NEW -j ACCEPT", cmd)
+			
+			if action == "add" {
+				acceptRules = append(acceptRules,
+					fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -p udp --dport 53 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \\\n%s", dnsUDPRule),
+					fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -p tcp --dport 53 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \\\n%s", dnsTCPRule),
+				)
+			} else {
+				acceptRules = append(acceptRules, dnsUDPRule+" 2>/dev/null || true", dnsTCPRule+" 2>/dev/null || true")
+			}
 		}
 	}
 
@@ -225,9 +272,9 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 	script.WriteString("$IPT -I FORWARD 1 -i \"$WG_IF\" -d \"$LAN_PROTECT\" -m conntrack --ctstate NEW -j DROP\n\n")
 
 	// Add generated firewall rules from UI (these go after ESTABLISHED and PROTECT)
-	if len(firewallRules) > 0 {
+	if len(firewallRules) > 0 || (iface != nil && (iface.AllowWebAccess || iface.AllowDNSAccess)) {
 		script.WriteString("# --- FIREWALL RULES FROM UI ---\n")
-		acceptRules, dropRules, _ := GenerateFirewallRules(firewallRules, clients, "add")
+		acceptRules, dropRules, _ := GenerateFirewallRules(firewallRules, clients, "add", iface)
 		if acceptRules != "" {
 			script.WriteString("# Allow specific traffic for clients with firewall rules\n")
 			script.WriteString(acceptRules)
@@ -396,9 +443,9 @@ func GeneratePostDownScriptWithRouting(globalSettings model.GlobalSetting, wgSub
 	script.WriteString("$IPT -D FORWARD -i \"$WG_IF\" -d \"$LAN_PROTECT\" -m conntrack --ctstate NEW -j DROP 2>/dev/null || true\n\n")
 
 	// Remove generated firewall rules from UI
-	if len(firewallRules) > 0 {
+	if len(firewallRules) > 0 || (iface != nil && (iface.AllowWebAccess || iface.AllowDNSAccess)) {
 		script.WriteString("# Remove firewall rules from UI\n")
-		acceptRules, dropRules, _ := GenerateFirewallRules(firewallRules, clients, "delete")
+		acceptRules, dropRules, _ := GenerateFirewallRules(firewallRules, clients, "delete", iface)
 		// Remove DROP rules first, then ACCEPT rules
 		if dropRules != "" {
 			script.WriteString(dropRules)

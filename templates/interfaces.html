@@ -235,6 +235,26 @@ WireGuard Interfaces
                     </div>
 
                     <hr>
+                    <h5>Client Access Control</h5>
+                    <small class="text-muted">Allow clients to access essential services regardless of firewall rules (only applies to server-type interfaces)</small>
+
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="allow_web_access" name="allow_web_access">
+                            <label class="custom-control-label" for="allow_web_access">Allow Web Access (HTTP/HTTPS)</label>
+                        </div>
+                        <small class="form-text text-muted">Allow ports 80 and 443 for all clients on this interface, regardless of firewall rules</small>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="allow_dns_access" name="allow_dns_access">
+                            <label class="custom-control-label" for="allow_dns_access">Allow DNS Access</label>
+                        </div>
+                        <small class="form-text text-muted">Allow port 53 (UDP/TCP) for all clients on this interface, regardless of firewall rules</small>
+                    </div>
+
+                    <hr>
 
                     <div class="form-group">
                         <div class="custom-control custom-checkbox">
@@ -394,6 +414,10 @@ function editInterface(id) {
         iface.allowed_interfaces.join(',') : iface.allowed_interfaces || '');
     $('#enable_snat').prop('checked', iface.enable_snat || false);
     
+    // Client access control (for server interfaces)
+    $('#allow_web_access').prop('checked', iface.allow_web_access || false);
+    $('#allow_dns_access').prop('checked', iface.allow_dns_access || false);
+    
     toggleInterfaceTypeFields();
     $('#interfaceModal').modal('show');
 }
@@ -458,6 +482,12 @@ function saveInterface() {
         data.allowed_interfaces = allowedInterfacesValue.split(',').map(s => s.trim()).filter(s => s);
     }
     data.enable_snat = $('#enable_snat').is(':checked');
+    
+    // Client access control (for server interfaces)
+    if (type === 'server') {
+        data.allow_web_access = $('#allow_web_access').is(':checked');
+        data.allow_dns_access = $('#allow_dns_access').is(':checked');
+    }
 
     const method = editingInterfaceId ? 'PUT' : 'POST';
     const url = editingInterfaceId ? 

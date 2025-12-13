@@ -215,6 +215,14 @@ Firewall Rules Management
             success: function (data) {
                 $('#n_interface_id option').remove();
                 $('#e_interface_id option').remove();
+                
+                // Sort interfaces: wg0 first, then others alphabetically
+                data.sort(function(a, b) {
+                    if (a.id === 'wg0') return -1;
+                    if (b.id === 'wg0') return 1;
+                    return a.id.localeCompare(b.id);
+                });
+                
                 $.each(data, function(index, iface) {
                     if (iface.enabled) {
                         const label = iface.name + ' (' + iface.id + ')';
