@@ -208,33 +208,35 @@ WireGuard Interfaces
                         </div>
                     </div>
 
-                    <hr>
-                    <h5>Advanced Routing Configuration</h5>
-                    <small class="text-muted">Configure inter-interface routing and NAT for site-to-site VPN scenarios</small>
+                    <div id="routing_section">
+                        <hr>
+                        <h5>Advanced Routing Configuration</h5>
+                        <small class="text-muted">Configure inter-interface routing and NAT for site-to-site VPN scenarios</small>
 
-                    <div class="form-group">
-                        <label for="remote_networks">Remote Networks</label>
-                        <input type="text" class="form-control" id="remote_networks" name="remote_networks"
-                               placeholder="e.g., 192.168.86.58/32, 192.168.86.0/24">
-                        <small class="form-text text-muted">Comma-separated CIDR networks reachable through this interface (for site-to-site VPN)</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="allowed_interfaces">Allowed Interfaces</label>
-                        <input type="text" class="form-control" id="allowed_interfaces" name="allowed_interfaces"
-                               placeholder="e.g., wg0, wg1">
-                        <small class="form-text text-muted">Comma-separated interface IDs that can forward traffic to this interface</small>
-                    </div>
-
-                    <div class="form-group">
-                        <div class="custom-control custom-checkbox">
-                            <input type="checkbox" class="custom-control-input" id="enable_snat" name="enable_snat">
-                            <label class="custom-control-label" for="enable_snat">Enable SNAT/Masquerade</label>
+                        <div class="form-group">
+                            <label for="remote_networks">Remote Networks</label>
+                            <input type="text" class="form-control" id="remote_networks" name="remote_networks"
+                                   placeholder="e.g., 192.168.86.58/32, 192.168.86.0/24">
+                            <small class="form-text text-muted">Comma-separated CIDR networks reachable through this interface (for site-to-site VPN)</small>
                         </div>
-                        <small class="form-text text-muted">NAT outbound traffic so remote networks see this interface's IP (useful for NAT traversal)</small>
-                    </div>
 
-                    <hr>
+                        <div class="form-group">
+                            <label for="allowed_interfaces">Allowed Interfaces</label>
+                            <input type="text" class="form-control" id="allowed_interfaces" name="allowed_interfaces"
+                                   placeholder="e.g., wg0, wg1">
+                            <small class="form-text text-muted">Comma-separated interface IDs that can forward traffic to this interface</small>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="enable_snat" name="enable_snat">
+                                <label class="custom-control-label" for="enable_snat">Enable SNAT/Masquerade</label>
+                            </div>
+                            <small class="form-text text-muted">NAT outbound traffic so remote networks see this interface's IP (useful for NAT traversal)</small>
+                        </div>
+
+                        <hr>
+                    </div>
 
                     <div class="form-group">
                         <div class="custom-control custom-checkbox">
@@ -354,6 +356,7 @@ function showCreateInterfaceModal() {
     $('#interface_id').prop('readonly', false);
     $('#interface_type').val('server');
     toggleInterfaceTypeFields();
+    $('#routing_section').show(); // Show routing section for new interfaces
     $('#interfaceModal').modal('show');
 }
 
@@ -394,6 +397,13 @@ function editInterface(id) {
     $('#allowed_interfaces').val(Array.isArray(iface.allowed_interfaces) ? 
         iface.allowed_interfaces.join(',') : iface.allowed_interfaces || '');
     $('#enable_snat').prop('checked', iface.enable_snat || false);
+    
+    // Hide routing section for default wg0 server interface
+    if (iface.id === 'wg0' && iface.type === 'server') {
+        $('#routing_section').hide();
+    } else {
+        $('#routing_section').show();
+    }
     
     toggleInterfaceTypeFields();
     $('#interfaceModal').modal('show');
