@@ -422,17 +422,24 @@ Firewall Rules Management
                 dataType: 'json',
                 contentType: "application/json",
                 success: function(rules) {
-                    // Check if client has any existing rules
-                    const clientRules = rules.filter(r => r.client_id === data.client_id);
-                    
-                    if (clientRules.length === 0) {
-                        // This is the first rule for this client - show modal
+                    // Check if client has any existing rules (handle null/undefined)
+                    if (rules && rules.length > 0) {
+                        const clientRules = rules.filter(r => r.client_id === data.client_id);
+                        
+                        if (clientRules.length === 0) {
+                            // This is the first rule for this client - show modal
+                            pendingRuleData = data;
+                            $('#modal_new_rule').modal('hide');
+                            $('#modal_first_rule_access').modal('show');
+                        } else {
+                            // Client already has rules - save directly
+                            saveFirewallRule(data);
+                        }
+                    } else {
+                        // No rules exist - this is the first rule
                         pendingRuleData = data;
                         $('#modal_new_rule').modal('hide');
                         $('#modal_first_rule_access').modal('show');
-                    } else {
-                        // Client already has rules - save directly
-                        saveFirewallRule(data);
                     }
                 },
                 error: function() {

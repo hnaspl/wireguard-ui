@@ -177,23 +177,24 @@ Wireguard Clients
                         </div>
                         <small class="form-text text-muted">Enable bidirectional peer communication for site-to-site VPN setup</small>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="_baseline_access_section" style="display: none;">
+                        <h5>Baseline Access (Only for Restricted Clients)</h5>
                         <div class="icheck-primary d-inline">
                             <input type="checkbox" id="_allow_web_access">
                             <label for="_allow_web_access">
                                 Allow Web Access (HTTP/HTTPS)
                             </label>
                         </div>
-                        <small class="form-text text-muted">Allow ports 80 and 443 for this client. If client has firewall rules, this grants additional web access beyond those rules. If no firewall rules, client already has full access.</small>
+                        <small class="form-text text-muted">Allow ports 80 and 443 for this client in addition to firewall rules.</small>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="_dns_access_section" style="display: none;">
                         <div class="icheck-primary d-inline">
                             <input type="checkbox" id="_allow_dns_access">
                             <label for="_allow_dns_access">
                                 Allow DNS Access (port 53)
                             </label>
                         </div>
-                        <small class="form-text text-muted">Allow port 53 (UDP/TCP) for this client. If client has firewall rules, this grants additional DNS access beyond those rules. If no firewall rules, client already has full access.</small>
+                        <small class="form-text text-muted">Allow port 53 (UDP/TCP) for this client in addition to firewall rules.</small>
                     </div>
                     <details>
                         <summary><strong>Public and Preshared Keys</strong>
@@ -691,6 +692,38 @@ Wireguard Clients
                         modal.find("#_client_preshared_key").val(client.preshared_key);
                         
                         modal.find("#_additional_notes").val(client.additional_notes);
+
+                        // Check if client has firewall rules to show/hide web/DNS access sections
+                        $.ajax({
+                            cache: false,
+                            method: 'GET',
+                            url: '{{.basePath}}/api/firewall-rules',
+                            dataType: 'json',
+                            contentType: "application/json",
+                            success: function(rules) {
+                                if (rules && rules.length > 0) {
+                                    const clientRules = rules.filter(r => r.client_id === client.id);
+                                    if (clientRules.length > 0) {
+                                        // Client has firewall rules - show web/DNS access options
+                                        $("#_baseline_access_section").show();
+                                        $("#_dns_access_section").show();
+                                    } else {
+                                        // No firewall rules - hide sections
+                                        $("#_baseline_access_section").hide();
+                                        $("#_dns_access_section").hide();
+                                    }
+                                } else {
+                                    // No rules at all - hide sections
+                                    $("#_baseline_access_section").hide();
+                                    $("#_dns_access_section").hide();
+                                }
+                            },
+                            error: function() {
+                                // On error, hide sections to be safe
+                                $("#_baseline_access_section").hide();
+                                $("#_dns_access_section").hide();
+                            }
+                        });
 
                         // handle subnet range select
                         $('#_subnet_ranges').on('select2:select', function (e) {
