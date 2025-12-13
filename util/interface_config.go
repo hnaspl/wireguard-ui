@@ -308,9 +308,23 @@ func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) er
 		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
 	}
 
-	// Don't auto-restart here - let admin use Apply Config button to avoid race conditions
-	// This prevents conflicts with init.sh monitoring
-	log.Infof("Config and scripts generated for interface %s. Use 'Apply Config' button to restart if needed.", interfaceID)
+	// If interface is enabled and currently running, restart it to apply changes
+	// This ensures PostUp/PostDown scripts are executed
+	if iface.Enabled {
+		// Check if interface is currently running
+		checkCmd := exec.Command("wg", "show", iface.ID)
+		if checkCmd.Run() == nil {
+			// Interface is running, restart it
+			log.Infof("Interface %s is running, restarting to apply new config and scripts", iface.ID)
+			if err := RestartInterface(iface.ID); err != nil {
+				log.Warnf("Failed to restart interface %s: %v (scripts generated but not applied yet)", iface.ID, err)
+			}
+		} else {
+			log.Infof("Interface %s is not running. Scripts generated. Start interface to apply.", iface.ID)
+		}
+	} else {
+		log.Infof("Interface %s is disabled. Config and scripts generated but not applied.", iface.ID)
+	}
 
 	return nil
 }
