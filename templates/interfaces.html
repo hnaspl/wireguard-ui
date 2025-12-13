@@ -234,28 +234,6 @@ WireGuard Interfaces
                         <small class="form-text text-muted">NAT outbound traffic so remote networks see this interface's IP (useful for NAT traversal)</small>
                     </div>
 
-                    <div id="server-access-control" style="display: none;">
-                        <hr>
-                        <h5>Baseline Client Access</h5>
-                        <small class="text-muted"><strong>Only applies to clients that have firewall rules.</strong> These checkboxes grant baseline access in addition to their specific firewall rules. Clients without firewall rules have full access (original behavior).</small>
-
-                        <div class="form-group mt-3">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="allow_web_access" name="allow_web_access">
-                                <label class="custom-control-label" for="allow_web_access">Allow Web Access (HTTP/HTTPS ports 80, 443)</label>
-                            </div>
-                            <small class="form-text text-muted">Clients with firewall rules will automatically get web access in addition to their rules</small>
-                        </div>
-
-                        <div class="form-group">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="allow_dns_access" name="allow_dns_access">
-                                <label class="custom-control-label" for="allow_dns_access">Allow DNS Access (port 53 UDP/TCP)</label>
-                            </div>
-                            <small class="form-text text-muted">Clients with firewall rules will automatically get DNS access in addition to their rules</small>
-                        </div>
-                    </div>
-
                     <hr>
 
                     <div class="form-group">
@@ -417,10 +395,6 @@ function editInterface(id) {
         iface.allowed_interfaces.join(',') : iface.allowed_interfaces || '');
     $('#enable_snat').prop('checked', iface.enable_snat || false);
     
-    // Client access control (for server interfaces)
-    $('#allow_web_access').prop('checked', iface.allow_web_access || false);
-    $('#allow_dns_access').prop('checked', iface.allow_dns_access || false);
-    
     toggleInterfaceTypeFields();
     $('#interfaceModal').modal('show');
 }
@@ -430,11 +404,9 @@ function toggleInterfaceTypeFields() {
     if (type === 'server') {
         $('#server-fields').show();
         $('#client-fields').hide();
-        $('#server-access-control').show();
     } else {
         $('#server-fields').hide();
         $('#client-fields').show();
-        $('#server-access-control').hide();
     }
 }
 
@@ -487,12 +459,6 @@ function saveInterface() {
         data.allowed_interfaces = allowedInterfacesValue.split(',').map(s => s.trim()).filter(s => s);
     }
     data.enable_snat = $('#enable_snat').is(':checked');
-    
-    // Client access control (for server interfaces)
-    if (type === 'server') {
-        data.allow_web_access = $('#allow_web_access').is(':checked');
-        data.allow_dns_access = $('#allow_dns_access').is(':checked');
-    }
 
     const method = editingInterfaceId ? 'PUT' : 'POST';
     const url = editingInterfaceId ? 

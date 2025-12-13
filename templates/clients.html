@@ -177,6 +177,24 @@ Wireguard Clients
                         </div>
                         <small class="form-text text-muted">Enable bidirectional peer communication for site-to-site VPN setup</small>
                     </div>
+                    <div class="form-group">
+                        <div class="icheck-primary d-inline">
+                            <input type="checkbox" id="_allow_web_access">
+                            <label for="_allow_web_access">
+                                Allow Web Access (HTTP/HTTPS)
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Allow ports 80 and 443 for this client. If client has firewall rules, this grants additional web access beyond those rules. If no firewall rules, client already has full access.</small>
+                    </div>
+                    <div class="form-group">
+                        <div class="icheck-primary d-inline">
+                            <input type="checkbox" id="_allow_dns_access">
+                            <label for="_allow_dns_access">
+                                Allow DNS Access (port 53)
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Allow port 53 (UDP/TCP) for this client. If client has firewall rules, this grants additional DNS access beyond those rules. If no firewall rules, client already has full access.</small>
+                    </div>
                     <details>
                         <summary><strong>Public and Preshared Keys</strong>
                             <i class="fas fa-info-circle" data-toggle="tooltip"
@@ -666,6 +684,8 @@ Wireguard Clients
                         modal.find("#_use_server_dns").prop("checked", client.use_server_dns);
                         modal.find("#_enabled").prop("checked", client.enabled);
                         modal.find("#_is_site_to_site").prop("checked", client.is_site_to_site);
+                        modal.find("#_allow_web_access").prop("checked", client.allow_web_access);
+                        modal.find("#_allow_dns_access").prop("checked", client.allow_dns_access);
 
                         modal.find("#_client_public_key").val(client.public_key);
                         modal.find("#_client_preshared_key").val(client.preshared_key);
@@ -798,11 +818,23 @@ Wireguard Clients
                 is_site_to_site = true;
             }
 
+            let allow_web_access = false;
+
+            if ($("#_allow_web_access").is(':checked')){
+                allow_web_access = true;
+            }
+
+            let allow_dns_access = false;
+
+            if ($("#_allow_dns_access").is(':checked')){
+                allow_dns_access = true;
+            }
+
             const additional_notes = $("#_additional_notes").val();
 
             const data = {"id": client_id, "name": name, "email": email, "telegram_userid": telegram_userid, "allocated_ips": allocated_ips,
                 "allowed_ips": allowed_ips, "extra_allowed_ips": extra_allowed_ips, "endpoint": endpoint,
-                "use_server_dns": use_server_dns, "enabled": enabled, "is_site_to_site": is_site_to_site, "public_key": public_key, "preshared_key": preshared_key, "additional_notes": additional_notes};
+                "use_server_dns": use_server_dns, "enabled": enabled, "is_site_to_site": is_site_to_site, "allow_web_access": allow_web_access, "allow_dns_access": allow_dns_access, "public_key": public_key, "preshared_key": preshared_key, "additional_notes": additional_notes};
 
             $.ajax({
                 cache: false,
