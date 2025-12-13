@@ -437,6 +437,8 @@ Firewall Rules Management
                     $('#modal_delete_rule').modal('hide');
                     toastr.success('Firewall rule deleted successfully');
                     loadFirewallRules();
+                    // Show the Apply Config button
+                    $("#apply-config-button").show();
                 },
                 error: function(jqXHR, exception) {
                     const responseJson = jQuery.parseJSON(jqXHR.responseText);
