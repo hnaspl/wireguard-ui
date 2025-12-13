@@ -194,10 +194,8 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 			iface.PublicKey = existingIface.PublicKey
 		}
 
-		// Set default config file path if not provided
-		if iface.ConfigFilePath == "" {
-			iface.ConfigFilePath = "/etc/wireguard/" + interfaceID + ".conf"
-		}
+		// Preserve ConfigFilePath from existing interface
+		iface.ConfigFilePath = existingIface.ConfigFilePath
 		
 		// Preserve is_default flag
 		iface.IsDefault = existingIface.IsDefault

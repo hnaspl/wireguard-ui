@@ -308,12 +308,9 @@ func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) er
 		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
 	}
 
-	// Restart the interface to apply changes
-	if iface.Enabled {
-		if err := RestartInterface(interfaceID); err != nil {
-			log.Warnf("Failed to restart interface %s (may not be critical): %v", interfaceID, err)
-		}
-	}
+	// Don't auto-restart here - let admin use Apply Config button to avoid race conditions
+	// This prevents conflicts with init.sh monitoring
+	log.Infof("Config and scripts generated for interface %s. Use 'Apply Config' button to restart if needed.", interfaceID)
 
 	return nil
 }
@@ -341,17 +338,27 @@ func RestartInterface(interfaceID string) error {
 			log.Warnf("Error stopping interface %s: %v", interfaceID, err)
 		}
 		
-		// Give it a moment to fully stop
-		time.Sleep(500 * time.Millisecond)
-	}
-	
-	// Verify interface is down before starting
-	checkCmd = exec.Command("wg", "show", interfaceID)
-	if checkCmd.Run() == nil {
-		// Interface still exists, force remove it
-		log.Warnf("Interface %s still exists after stop, forcing down", interfaceID)
-		exec.Command("ip", "link", "delete", interfaceID).Run()
-		time.Sleep(200 * time.Millisecond)
+		// Give it more time to fully stop and release resources
+		time.Sleep(1 * time.Second)
+		
+		// Verify interface is down
+		for i := 0; i < 3; i++ {
+			checkCmd = exec.Command("wg", "show", interfaceID)
+			if checkCmd.Run() != nil {
+				// Interface is down
+				break
+			}
+			// Still exists, wait a bit more
+			time.Sleep(500 * time.Millisecond)
+		}
+		
+		// If still exists after multiple checks, force remove it
+		checkCmd = exec.Command("wg", "show", interfaceID)
+		if checkCmd.Run() == nil {
+			log.Warnf("Interface %s still exists after stop, forcing down", interfaceID)
+			exec.Command("ip", "link", "delete", interfaceID).Run()
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
 	
 	// Start the interface
