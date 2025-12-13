@@ -298,11 +298,12 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 	script.WriteString("  $IPT -t mangle -C OUTPUT -p tcp --tcp-flags SYN,RST SYN -o \"$WG_IF\" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || \\\n")
 	script.WriteString("  $IPT -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -o \"$WG_IF\" -j TCPMSS --clamp-mss-to-pmtu\n\n")
 
-	// NOTE: Removed NAT RETURN rules that were preventing SNAT on client interfaces
-	// Client interfaces (like andrzej) need to MASQUERADE traffic to their remote networks
-	// The broad RETURN rules here were blocking that SNAT
-	// Each interface now handles its own NAT rules independently
-	
+	script.WriteString("  # Do NOT NAT either way between WG and LANs\n")
+	script.WriteString("  $IPT -t nat -C POSTROUTING -s \"$WG_SUB\" -d \"$LAN_ALL\" -j RETURN 2>/dev/null || \\\n")
+	script.WriteString("  $IPT -t nat -I POSTROUTING 1 -s \"$WG_SUB\" -d \"$LAN_ALL\" -j RETURN\n")
+	script.WriteString("  $IPT -t nat -C POSTROUTING -s \"$LAN_ALL\" -d \"$WG_SUB\" -j RETURN 2>/dev/null || \\\n")
+	script.WriteString("  $IPT -t nat -I POSTROUTING 1 -s \"$LAN_ALL\" -d \"$WG_SUB\" -j RETURN\n\n")
+
 	script.WriteString("  # allow NEW LAN -> WG\n")
 	script.WriteString("  $IPT -C FORWARD -o \"$WG_IF\" -s \"$LAN_ALL\" -d \"$WG_SUB\" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \\\n")
 	script.WriteString("  $IPT -I FORWARD 1 -o \"$WG_IF\" -s \"$LAN_ALL\" -d \"$WG_SUB\" -m conntrack --ctstate NEW -j ACCEPT\n")
