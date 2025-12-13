@@ -42,6 +42,10 @@ func (o *JsonDB) GetInterface(id string) (model.WgInterface, error) {
 		return iface, err
 	}
 
+	// DEBUG: Log what we retrieved
+	log.Infof("GetInterface: ID=%s, RemoteNetworks=%v, AllowedInterfaces=%v, EnableSNAT=%v", 
+		iface.ID, iface.RemoteNetworks, iface.AllowedInterfaces, iface.EnableSNAT)
+
 	return iface, nil
 }
 
@@ -65,6 +69,10 @@ func (o *JsonDB) SaveInterface(iface model.WgInterface) error {
 		iface.Created = time.Now().UTC()
 	}
 	iface.Updated = time.Now().UTC()
+
+	// DEBUG: Log what we're saving
+	log.Infof("SaveInterface: ID=%s, RemoteNetworks=%v, AllowedInterfaces=%v, EnableSNAT=%v", 
+		iface.ID, iface.RemoteNetworks, iface.AllowedInterfaces, iface.EnableSNAT)
 
 	interfacePath := path.Join(path.Join(o.dbPath, "interfaces"), iface.ID+".json")
 	output := o.conn.Write("interfaces", iface.ID, iface)
