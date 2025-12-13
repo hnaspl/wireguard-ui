@@ -88,6 +88,14 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 		}
 	}
 
+	// Build map of client ID to client object for web/DNS access checking
+	clientObjMap := make(map[string]*model.Client)
+	for _, clientData := range clients {
+		if clientData.Client != nil && clientData.Client.Enabled {
+			clientObjMap[clientData.Client.ID] = clientData.Client
+		}
+	}
+
 	// Generate DROP rules for clients that have firewall rules configured
 	// This enforces "if firewall rules exist, only allow what's specified"
 	var restrictedIPs []string
@@ -97,15 +105,18 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 			continue
 		}
 
+		// Get the client object for per-client web/DNS access settings
+		clientObj := clientObjMap[clientID]
+
 		for _, clientIP := range clientIPs {
 			// Strip CIDR notation if present
 			sourceIP := strings.Split(clientIP, "/")[0]
 			restrictedIPs = append(restrictedIPs, sourceIP)
 			
-			// Add web/DNS access for clients with firewall rules if interface has these flags enabled
+			// Add web/DNS access for clients with firewall rules if client has these flags enabled
 			// (Only add for restricted clients - unrestricted clients get full access anyway)
-			if iface != nil {
-				if iface.AllowWebAccess {
+			if clientObj != nil {
+				if clientObj.AllowWebAccess {
 					// Allow HTTP and HTTPS for this specific client
 					var cmd string
 					if action == "add" {
@@ -119,7 +130,7 @@ func GenerateFirewallRules(firewallRules []model.FirewallRule, clients []model.C
 					acceptRules = append(acceptRules, webHTTPRule, webHTTPSRule)
 				}
 				
-				if iface.AllowDNSAccess {
+				if clientObj.AllowDNSAccess {
 					// Allow DNS UDP and TCP for this specific client
 					var cmd string
 					if action == "add" {

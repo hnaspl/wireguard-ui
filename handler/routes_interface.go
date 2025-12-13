@@ -135,6 +135,14 @@ func CreateInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
+		// Generate config and scripts immediately after creating interface
+		tmplDir := c.Get("tmplDir").(fs.FS)
+		if err := util.ApplyInterfaceConfig(db, tmplDir, iface.ID); err != nil {
+			log.Error("Cannot generate config for new interface: ", err)
+			// Don't fail the request, just log the error
+			// Interface is created, but scripts need manual generation
+		}
+
 		return c.JSON(http.StatusCreated, iface)
 	}
 }
@@ -203,6 +211,14 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
 				false, "Cannot update interface",
 			})
+		}
+
+		// Regenerate config and scripts immediately after updating interface
+		tmplDir := c.Get("tmplDir").(fs.FS)
+		if err := util.ApplyInterfaceConfig(db, tmplDir, iface.ID); err != nil {
+			log.Error("Cannot regenerate config for updated interface: ", err)
+			// Don't fail the request, just log the error
+			// Interface is updated, but scripts need manual regeneration
 		}
 
 		return c.JSON(http.StatusOK, iface)
