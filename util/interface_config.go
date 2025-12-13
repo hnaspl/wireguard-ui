@@ -304,6 +304,8 @@ func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) er
 	}
 
 	// Generate and save scripts
+	log.Infof("Generating scripts for interface %s: RemoteNetworks=%v, AllowedInterfaces=%v, EnableSNAT=%v", 
+		interfaceID, iface.RemoteNetworks, iface.AllowedInterfaces, iface.EnableSNAT)
 	if err := GenerateAndSaveInterfaceScripts(db, interfaceID, iface, settings, firewallRules, clients); err != nil {
 		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
 	}
