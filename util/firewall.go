@@ -460,9 +460,8 @@ func GeneratePostDownScriptWithRouting(globalSettings model.GlobalSetting, wgSub
 	script.WriteString("  $IPT -t mangle -D FORWARD -p tcp --tcp-flags SYN,RST SYN -s \"$WG_SUB\" -d \"$LAN_ALL\" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true\n")
 	script.WriteString("  $IPT -t mangle -D OUTPUT  -p tcp --tcp-flags SYN,RST SYN -o \"$WG_IF\" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true\n\n")
 
-	script.WriteString("  $IPT -t nat -D POSTROUTING -s \"$WG_SUB\" -d \"$LAN_ALL\" -j RETURN 2>/dev/null || true\n")
-	script.WriteString("  $IPT -t nat -D POSTROUTING -s \"$LAN_ALL\" -d \"$WG_SUB\" -j RETURN 2>/dev/null || true\n\n")
-
+	// NOTE: NAT RETURN rules removed from PostUp, so nothing to remove here
+	
 	script.WriteString("  $IPT -D FORWARD -o \"$WG_IF\" -s \"$LAN_ALL\" -d \"$WG_SUB\" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || true\n")
 	script.WriteString("  $IPT -D FORWARD -i \"$WG_IF\" -s \"$WG_SUB\" -d \"$LAN_ALL\" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || true\n")
 	script.WriteString("done\n\n")
