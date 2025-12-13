@@ -282,6 +282,13 @@ func ToggleInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
+		// Prevent disabling the default interface
+		if iface.IsDefault && iface.Enabled {
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{
+				false, "Cannot disable the default interface",
+			})
+		}
+
 		// Toggle enabled status
 		iface.Enabled = !iface.Enabled
 		iface.Updated = time.Now().UTC()

@@ -343,14 +343,15 @@ function renderInterfaces() {
                     }
                 </div>
                 <div class="interface-actions">
-                    <button class="btn btn-sm btn-info" onclick="viewInterfaceDetails('${iface.id}')">
-                        <i class="fas fa-eye"></i> Details
+                    <button class="btn btn-sm btn-info" onclick="viewInterfaceDetails('${iface.id}', '${iface.type}')">
+                        <i class="fas fa-eye"></i> ${iface.type === 'server' ? 'View Clients' : 'Details'}
                     </button>
                     <button class="btn btn-sm btn-primary" onclick="editInterface('${iface.id}')">
                         <i class="fas fa-edit"></i> Edit
                     </button>
                     <button class="btn btn-sm ${iface.enabled ? 'btn-warning' : 'btn-success'}" 
-                            onclick="toggleInterface('${iface.id}')">
+                            onclick="toggleInterface('${iface.id}')"
+                            ${iface.is_default ? 'disabled title="Default interface cannot be disabled"' : ''}>
                         <i class="fas fa-power-off"></i> ${iface.enabled ? 'Disable' : 'Enable'}
                     </button>
                     ${!iface.is_default ? `
@@ -546,9 +547,105 @@ function deleteInterface(id) {
     });
 }
 
-function viewInterfaceDetails(id) {
-    // Redirect to clients page - clients are filtered by interface on the main page
-    window.location.href = `{{.basePath}}/`;
+<!-- Interface Details Modal -->
+<div class="modal fade" id="interfaceDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="detailsModalTitle">Interface Details</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="detailsModalBody">
+                <!-- Details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+function viewInterfaceDetails(id, type) {
+    if (type === 'server') {
+        // Navigate to clients page (filtered by this interface)
+        window.location.href = `{{.basePath}}/?interface=${id}`;
+    } else {
+        // Show details modal for client-type interface
+        const iface = interfaces.find(i => i.id === id);
+        if (!iface) return;
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>General Information</h5>
+                    <dl class="row">
+                        <dt class="col-sm-5">Interface ID:</dt>
+                        <dd class="col-sm-7"><code>${escapeHtml(iface.id)}</code></dd>
+                        
+                        <dt class="col-sm-5">Name:</dt>
+                        <dd class="col-sm-7">${escapeHtml(iface.name)}</dd>
+                        
+                        <dt class="col-sm-5">Type:</dt>
+                        <dd class="col-sm-7"><span class="badge badge-info">${escapeHtml(iface.type)}</span></dd>
+                        
+                        <dt class="col-sm-5">Status:</dt>
+                        <dd class="col-sm-7">${iface.enabled ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-secondary">Disabled</span>'}</dd>
+                        
+                        <dt class="col-sm-5">IP Addresses:</dt>
+                        <dd class="col-sm-7">${iface.interface_addresses ? iface.interface_addresses.join(', ') : 'None'}</dd>
+                        
+                        <dt class="col-sm-5">MTU:</dt>
+                        <dd class="col-sm-7">${iface.mtu || 'Default'}</dd>
+                        
+                        <dt class="col-sm-5">Table:</dt>
+                        <dd class="col-sm-7"><code>${iface.table || 'off'}</code></dd>
+                    </dl>
+                </div>
+                <div class="col-md-6">
+                    <h5>Peer Configuration</h5>
+                    <dl class="row">
+                        <dt class="col-sm-5">Endpoint:</dt>
+                        <dd class="col-sm-7"><code>${escapeHtml(iface.peer_endpoint || 'Not configured')}</code></dd>
+                        
+                        <dt class="col-sm-5">Public Key:</dt>
+                        <dd class="col-sm-7"><small><code>${escapeHtml(iface.peer_public_key || 'Not configured')}</code></small></dd>
+                        
+                        <dt class="col-sm-5">Allowed IPs:</dt>
+                        <dd class="col-sm-7">${iface.peer_allowed_ips ? iface.peer_allowed_ips.join(', ') : 'None'}</dd>
+                        
+                        <dt class="col-sm-5">Keepalive:</dt>
+                        <dd class="col-sm-7">${iface.peer_persistent_keepalive || 'Not set'}</dd>
+                    </dl>
+                </div>
+            </div>`;
+        
+        if (iface.remote_networks && iface.remote_networks.length > 0) {
+            html += `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h5>Advanced Routing</h5>
+                    <dl class="row">
+                        <dt class="col-sm-3">Remote Networks:</dt>
+                        <dd class="col-sm-9">${iface.remote_networks.join(', ')}</dd>
+                        
+                        ${iface.allowed_interfaces && iface.allowed_interfaces.length > 0 ? `
+                        <dt class="col-sm-3">Allowed Interfaces:</dt>
+                        <dd class="col-sm-9">${iface.allowed_interfaces.join(', ')}</dd>
+                        ` : ''}
+                        
+                        <dt class="col-sm-3">SNAT Enabled:</dt>
+                        <dd class="col-sm-9">${iface.enable_snat ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-secondary">No</span>'}</dd>
+                    </dl>
+                </div>
+            </div>`;
+        }
+        
+        $('#detailsModalTitle').text(`${iface.name} - Details`);
+        $('#detailsModalBody').html(html);
+        $('#interfaceDetailsModal').modal('show');
+    }
 }
 
 function escapeHtml(text) {
