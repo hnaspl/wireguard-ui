@@ -299,7 +299,7 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 	script.WriteString("  $IPT -t mangle -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -o \"$WG_IF\" -j TCPMSS --clamp-mss-to-pmtu\n\n")
 
 	script.WriteString("  # Do NOT NAT either way between WG and LOCAL LANs (not remote networks via other WG interfaces)\n")
-	script.WriteString("  # -o eth+ ensures this only applies to local LAN, not traffic via other WG interfaces\n")
+	script.WriteString("  # Output interface match ensures this only applies to local LAN, not traffic via other WG interfaces\n")
 	script.WriteString("  $IPT -t nat -C POSTROUTING -s \"$WG_SUB\" -d \"$LAN_ALL\" -o \"$MASQ_OIF_PATTERN\" -j RETURN 2>/dev/null || \\\n")
 	script.WriteString("  $IPT -t nat -I POSTROUTING 1 -s \"$WG_SUB\" -d \"$LAN_ALL\" -o \"$MASQ_OIF_PATTERN\" -j RETURN\n")
 	script.WriteString("  $IPT -t nat -C POSTROUTING -s \"$LAN_ALL\" -d \"$WG_SUB\" -o \"$WG_IF\" -j RETURN 2>/dev/null || \\\n")
