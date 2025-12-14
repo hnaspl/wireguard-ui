@@ -554,6 +554,14 @@ func generateClientPostUpScript(wgIf string, iface *model.WgInterface, allInterf
 		script.WriteString(fmt.Sprintf("# Remote networks accessible via %s: %s\n", wgIf, strings.Join(iface.RemoteNetworks, ", ")))
 		script.WriteString("\n")
 
+		// Add IP routes for remote networks through this interface
+		// This tells the kernel to route traffic for these networks through the client interface
+		for _, remoteNet := range iface.RemoteNetworks {
+			script.WriteString(fmt.Sprintf("# Route %s through %s\n", remoteNet, wgIf))
+			script.WriteString(fmt.Sprintf("ip -4 route replace %s dev \"$WG_IF\" 2>/dev/null || true\n", remoteNet))
+		}
+		script.WriteString("\n")
+
 		// Allow traffic from LAN to remote networks via this interface
 		// Using -A (append) not -I (insert) to match user's working example
 		for _, remoteNet := range iface.RemoteNetworks {
@@ -614,7 +622,14 @@ func generateClientPostDownScript(wgIf string, iface *model.WgInterface, allInte
 	
 	// Remove inter-interface routing rules if configured
 	if iface != nil && len(iface.RemoteNetworks) > 0 {
-		script.WriteString("# Remove inter-interface routing rules\n")
+		script.WriteString("# Remove inter-interface routing rules\n\n")
+
+		// Remove IP routes for remote networks
+		for _, remoteNet := range iface.RemoteNetworks {
+			script.WriteString(fmt.Sprintf("# Remove route for %s\n", remoteNet))
+			script.WriteString(fmt.Sprintf("ip -4 route del %s dev \"$WG_IF\" 2>/dev/null || true\n", remoteNet))
+		}
+		script.WriteString("\n")
 
 		// Remove SNAT if it was enabled
 		if iface.EnableSNAT {
