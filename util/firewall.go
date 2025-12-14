@@ -328,7 +328,9 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 		// Using -A (append) not -I (insert) to match user's working example and ensure consistent rule ordering
 		for _, remoteNet := range iface.RemoteNetworks {
 			script.WriteString(fmt.Sprintf("# Allow LAN/macvlan -> %s to %s\n", interfaceName, remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -C FORWARD -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || \\\n", remoteNet))
 			script.WriteString(fmt.Sprintf("$IPT -A FORWARD -o \"$WG_IF\" -d %s -j ACCEPT\n", remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \\\n"))
 			script.WriteString(fmt.Sprintf("$IPT -A FORWARD -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT\n\n"))
 		}
 
@@ -348,7 +350,9 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 
 				for _, remoteNet := range iface.RemoteNetworks {
 					script.WriteString(fmt.Sprintf("# Allow %s -> %s to reach %s\n", allowedIfaceID, interfaceName, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i %s -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || \\\n", allowedIfaceID, remoteNet))
 					script.WriteString(fmt.Sprintf("$IPT -A FORWARD -i %s -o \"$WG_IF\" -d %s -j ACCEPT\n", allowedIfaceID, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \\\n", allowedIfaceID))
 					script.WriteString(fmt.Sprintf("$IPT -A FORWARD -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT\n\n", allowedIfaceID))
 				}
 			}
@@ -358,6 +362,7 @@ func GeneratePostUpScriptWithRouting(globalSettings model.GlobalSetting, wgSubne
 		// Using -A (append) to match user's working example
 		if iface.EnableSNAT {
 			script.WriteString(fmt.Sprintf("# SNAT out of %s so remote sees traffic from interface IP (no extra routes needed on their LAN)\n", interfaceName))
+			script.WriteString(fmt.Sprintf("$IPT -t nat -C POSTROUTING -o \"$WG_IF\" -j MASQUERADE 2>/dev/null || \\\n"))
 			script.WriteString(fmt.Sprintf("$IPT -t nat -A POSTROUTING -o \"$WG_IF\" -j MASQUERADE\n\n"))
 		}
 	}
@@ -553,7 +558,9 @@ func generateClientPostUpScript(wgIf string, iface *model.WgInterface, allInterf
 		// Using -A (append) not -I (insert) to match user's working example
 		for _, remoteNet := range iface.RemoteNetworks {
 			script.WriteString(fmt.Sprintf("# Allow LAN/macvlan -> %s to %s\n", wgIf, remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -C FORWARD -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || \\\n", remoteNet))
 			script.WriteString(fmt.Sprintf("$IPT -A FORWARD -o \"$WG_IF\" -d %s -j ACCEPT\n", remoteNet))
+			script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \\\n"))
 			script.WriteString(fmt.Sprintf("$IPT -A FORWARD -i \"$WG_IF\" -m state --state ESTABLISHED,RELATED -j ACCEPT\n\n"))
 		}
 
@@ -572,7 +579,9 @@ func generateClientPostUpScript(wgIf string, iface *model.WgInterface, allInterf
 
 				for _, remoteNet := range iface.RemoteNetworks {
 					script.WriteString(fmt.Sprintf("# Allow %s -> %s to reach %s\n", allowedIfaceID, wgIf, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i %s -o \"$WG_IF\" -d %s -j ACCEPT 2>/dev/null || \\\n", allowedIfaceID, remoteNet))
 					script.WriteString(fmt.Sprintf("$IPT -A FORWARD -i %s -o \"$WG_IF\" -d %s -j ACCEPT\n", allowedIfaceID, remoteNet))
+					script.WriteString(fmt.Sprintf("$IPT -C FORWARD -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || \\\n", allowedIfaceID))
 					script.WriteString(fmt.Sprintf("$IPT -A FORWARD -i \"$WG_IF\" -o %s -m state --state ESTABLISHED,RELATED -j ACCEPT\n\n", allowedIfaceID))
 				}
 			}
@@ -582,6 +591,7 @@ func generateClientPostUpScript(wgIf string, iface *model.WgInterface, allInterf
 		// Using -A (append) to match user's working example
 		if iface.EnableSNAT {
 			script.WriteString(fmt.Sprintf("# SNAT out of %s so remote sees traffic from interface IP (no extra routes needed on their LAN)\n", wgIf))
+			script.WriteString(fmt.Sprintf("$IPT -t nat -C POSTROUTING -o \"$WG_IF\" -j MASQUERADE 2>/dev/null || \\\n"))
 			script.WriteString(fmt.Sprintf("$IPT -t nat -A POSTROUTING -o \"$WG_IF\" -j MASQUERADE\n\n"))
 		}
 	}
