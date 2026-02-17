@@ -41,6 +41,7 @@ func (o *JsonDB) Init() error {
 	var userPath = path.Join(o.dbPath, "users")
 	var wakeOnLanHostsPath = path.Join(o.dbPath, "wake_on_lan_hosts")
 	var firewallRulesPath = path.Join(o.dbPath, "firewall_rules")
+	var interfacesPath = path.Join(o.dbPath, "interfaces")
 	var serverInterfacePath = path.Join(serverPath, "interfaces.json")
 	var serverKeyPairPath = path.Join(serverPath, "keypair.json")
 	var globalSettingPath = path.Join(serverPath, "global_settings.json")
@@ -61,6 +62,9 @@ func (o *JsonDB) Init() error {
 	}
 	if _, err := os.Stat(firewallRulesPath); os.IsNotExist(err) {
 		os.MkdirAll(firewallRulesPath, os.ModePerm)
+	}
+	if _, err := os.Stat(interfacesPath); os.IsNotExist(err) {
+		os.MkdirAll(interfacesPath, os.ModePerm)
 	}
 
 	// server's interface
@@ -277,7 +281,8 @@ func (o *JsonDB) GetClients(hasQRCode bool) ([]model.ClientData, error) {
 	// read all client json files in "clients" directory
 	records, err := o.conn.ReadAll("clients")
 	if err != nil {
-		return clients, err
+		// Missing collection is not an error - return empty slice
+		return clients, nil
 	}
 
 	// build the ClientData list

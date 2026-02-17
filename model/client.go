@@ -23,6 +23,8 @@ type Client struct {
 	UseServerDNS    bool      `json:"use_server_dns"`
 	Enabled         bool      `json:"enabled"`
 	IsSiteToSite    bool      `json:"is_site_to_site"`
+	AllowWebAccess  bool      `json:"allow_web_access"`  // Allow ports 80, 443 even when client has firewall rules
+	AllowDNSAccess  bool      `json:"allow_dns_access"`  // Allow port 53 (UDP/TCP) even when client has firewall rules
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }

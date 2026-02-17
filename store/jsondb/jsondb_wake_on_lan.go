@@ -15,7 +15,8 @@ func (o *JsonDB) GetWakeOnLanHosts() ([]model.WakeOnLanHost, error) {
 	// read all client json file in "hosts" directory
 	records, err := o.conn.ReadAll(model.WakeOnLanHostCollectionName)
 	if err != nil {
-		return hosts, err
+		// Missing collection is not an error - return empty slice
+		return hosts, nil
 	}
 
 	// build the ClientData list

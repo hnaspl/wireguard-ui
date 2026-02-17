@@ -14,6 +14,7 @@ type WgInterface struct {
 	PublicKey          string    `json:"public_key"`       // Auto-calculated from private key
 	ListenPort         int       `json:"listen_port"`      // For server type interfaces
 	MTU                int       `json:"mtu"`              // MTU setting
+	Table              string    `json:"table"`            // Routing table ("off", "auto", or number) - defaults to "off" for Docker compatibility
 	DNS                []string  `json:"dns"`              // DNS servers
 	PostUpScript       string    `json:"post_up_script"`   // Custom PostUp script content
 	PostDownScript     string    `json:"post_down_script"` // Custom PostDown script content
@@ -29,6 +30,15 @@ type WgInterface struct {
 	PeerEndpoint            string   `json:"peer_endpoint,omitempty"`             // Remote server endpoint (host:port)
 	PeerAllowedIPs          []string `json:"peer_allowed_ips,omitempty"`          // Routes through this peer
 	PeerPersistentKeepalive int      `json:"peer_persistent_keepalive,omitempty"` // Keepalive interval
+
+	// Advanced routing configuration
+	AllowedInterfaces []string `json:"allowed_interfaces,omitempty"` // Interface IDs that can forward traffic to this interface
+	RemoteNetworks    []string `json:"remote_networks,omitempty"`    // Networks reachable through this interface (CIDR notation)
+	EnableSNAT        bool     `json:"enable_snat,omitempty"`        // Enable SNAT/MASQUERADE for RemoteNetworks
+	
+	// Client access control (for server interfaces with clients)
+	AllowWebAccess bool `json:"allow_web_access,omitempty"` // Allow HTTP/HTTPS (80, 443) regardless of firewall rules
+	AllowDNSAccess bool `json:"allow_dns_access,omitempty"` // Allow DNS (53) regardless of firewall rules
 }
 
 // WgInterfaceType constants

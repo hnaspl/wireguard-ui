@@ -341,7 +341,15 @@
                         </button>
                     </div>
                     <div class="modal-body">
-                        <p>Do you want to write config file and restart WireGuard server?</p>
+                        <p>This will regenerate configuration files and restart WireGuard interfaces to apply changes.</p>
+                        <p><strong>What happens:</strong></p>
+                        <ul>
+                            <li>Config files are regenerated for all enabled interfaces</li>
+                            <li>PostUp/PostDown scripts are regenerated with updated firewall rules and routing</li>
+                            <li>Each interface is restarted: <code>wg-quick down</code> → <code>wg-quick up</code></li>
+                            <li>PostDown scripts run (clean up old rules), then PostUp scripts run (apply new rules)</li>
+                        </ul>
+                        <p class="text-muted"><small>Note: Only WireGuard interfaces restart, not the entire container/server.</small></p>
                     </div>
                     <div class="modal-footer justify-content-between">
                         <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>

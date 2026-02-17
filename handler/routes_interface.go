@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
+	"os/exec"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/ngoduykhanh/wireguard-ui/model"
 	"github.com/ngoduykhanh/wireguard-ui/store"
+	"github.com/ngoduykhanh/wireguard-ui/templates"
 	"github.com/ngoduykhanh/wireguard-ui/util"
 )
 
@@ -81,6 +84,11 @@ func CreateInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
+		// Set default Table to "off" for Docker compatibility if not provided
+		if iface.Table == "" {
+			iface.Table = "off"
+		}
+
 		// Check if interface already exists
 		_, err := db.GetInterface(iface.ID)
 		if err == nil {
@@ -128,6 +136,13 @@ func CreateInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
+		// Generate config and scripts immediately after creating interface
+		if err := util.ApplyInterfaceConfig(db, templates.Templates, iface.ID); err != nil {
+			log.Error("Cannot generate config for new interface: ", err)
+			// Don't fail the request, just log the error
+			// Interface is created, but scripts need manual generation
+		}
+
 		return c.JSON(http.StatusCreated, iface)
 	}
 }
@@ -159,6 +174,11 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 		// Preserve creation time
 		iface.Created = existingIface.Created
 
+		// Set default Table to "off" for Docker compatibility if not provided
+		if iface.Table == "" {
+			iface.Table = "off"
+		}
+
 		// If private key changed, recalculate public key
 		if iface.PrivateKey != "" && iface.PrivateKey != existingIface.PrivateKey {
 			key, err := wgtypes.ParseKey(iface.PrivateKey)
@@ -174,6 +194,12 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 			iface.PublicKey = existingIface.PublicKey
 		}
 
+		// Preserve ConfigFilePath from existing interface
+		iface.ConfigFilePath = existingIface.ConfigFilePath
+		
+		// Preserve is_default flag
+		iface.IsDefault = existingIface.IsDefault
+
 		// Update timestamp
 		iface.Updated = time.Now().UTC()
 
@@ -183,6 +209,13 @@ func UpdateInterface(db store.IStore) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
 				false, "Cannot update interface",
 			})
+		}
+
+		// Regenerate config and scripts immediately after updating interface
+		if err := util.ApplyInterfaceConfig(db, templates.Templates, iface.ID); err != nil {
+			log.Error("Cannot regenerate config for updated interface: ", err)
+			// Don't fail the request, just log the error
+			// Interface is updated, but scripts need manual regeneration
 		}
 
 		return c.JSON(http.StatusOK, iface)
@@ -217,7 +250,26 @@ func DeleteInterface(db store.IStore) echo.HandlerFunc {
 			})
 		}
 
-		// Delete the interface
+		// Try to stop the interface gracefully before deleting files
+		configPath := fmt.Sprintf("/etc/wireguard/%s.conf", interfaceID)
+		cmd := exec.Command("wg-quick", "down", configPath)
+		if err := cmd.Run(); err != nil {
+			// Interface might not be running, that's okay
+			log.Debugf("Could not stop interface %s (may not be running): %v", interfaceID, err)
+		}
+
+		// Delete the WireGuard config file
+		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+			log.Warnf("Failed to remove config file %s: %v", configPath, err)
+		}
+
+		// Delete interface-specific PostUp/PostDown scripts
+		postUpPath := fmt.Sprintf("/etc/wireguard/%s-postup.sh", interfaceID)
+		postDownPath := fmt.Sprintf("/etc/wireguard/%s-postdown.sh", interfaceID)
+		os.Remove(postUpPath)   // Ignore errors - files may not exist
+		os.Remove(postDownPath) // Ignore errors - files may not exist
+
+		// Delete the interface from database
 		if err := db.DeleteInterface(interfaceID); err != nil {
 			log.Error("Cannot delete interface from database: ", err)
 			return c.JSON(http.StatusInternalServerError, jsonHTTPResponse{
@@ -240,6 +292,13 @@ func ToggleInterface(db store.IStore) echo.HandlerFunc {
 		if err != nil {
 			return c.JSON(http.StatusNotFound, jsonHTTPResponse{
 				false, "Interface not found",
+			})
+		}
+
+		// Prevent disabling the default interface
+		if iface.IsDefault && iface.Enabled {
+			return c.JSON(http.StatusBadRequest, jsonHTTPResponse{
+				false, "Cannot disable the default interface",
 			})
 		}
 
@@ -312,9 +371,7 @@ func GetInterfaceFirewallRules(db store.IStore) echo.HandlerFunc {
 func InterfacesPage() echo.HandlerFunc {
 	return func(c echo.Context) error {
 		return c.Render(http.StatusOK, "interfaces.html", map[string]interface{}{
-			"baseData": map[string]interface{}{
-				"Active": "interfaces",
-			},
+			"baseData": model.BaseData{Active: "interfaces", CurrentUser: currentUser(c), Admin: isAdmin(c)},
 		})
 	}
 }

@@ -39,7 +39,10 @@ WireGuard Interfaces
     }
 </style>
 {{end}}
-{{define "body.html"}}
+{{define "page_title"}}
+WireGuard Interfaces
+{{end}}
+{{define "page_content"}}
 <section class="content-header">
     <div class="container-fluid">
         <div class="row mb-2">
@@ -205,6 +208,36 @@ WireGuard Interfaces
                         </div>
                     </div>
 
+                    <div id="routing_section">
+                        <hr>
+                        <h5>Advanced Routing Configuration</h5>
+                        <small class="text-muted">Configure inter-interface routing and NAT for site-to-site VPN scenarios</small>
+
+                        <div class="form-group">
+                            <label for="remote_networks">Remote Networks</label>
+                            <input type="text" class="form-control" id="remote_networks" name="remote_networks"
+                                   placeholder="e.g., 192.168.86.58/32, 192.168.86.0/24">
+                            <small class="form-text text-muted">Comma-separated CIDR networks reachable through this interface (for site-to-site VPN)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="allowed_interfaces">Allowed Interfaces</label>
+                            <input type="text" class="form-control" id="allowed_interfaces" name="allowed_interfaces"
+                                   placeholder="e.g., wg0, wg1">
+                            <small class="form-text text-muted">Comma-separated interface IDs that can forward traffic to this interface</small>
+                        </div>
+
+                        <div class="form-group">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="enable_snat" name="enable_snat">
+                                <label class="custom-control-label" for="enable_snat">Enable SNAT/Masquerade</label>
+                            </div>
+                            <small class="form-text text-muted">NAT outbound traffic so remote networks see this interface's IP (useful for NAT traversal)</small>
+                        </div>
+
+                        <hr>
+                    </div>
+
                     <div class="form-group">
                         <div class="custom-control custom-checkbox">
                             <input type="checkbox" class="custom-control-input" id="enabled" name="enabled" checked>
@@ -292,14 +325,15 @@ function renderInterfaces() {
                     }
                 </div>
                 <div class="interface-actions">
-                    <button class="btn btn-sm btn-info" onclick="viewInterfaceDetails('${iface.id}')">
-                        <i class="fas fa-eye"></i> Details
+                    <button class="btn btn-sm btn-info" onclick="viewInterfaceDetails('${iface.id}', '${iface.type}')">
+                        <i class="fas fa-eye"></i> ${iface.type === 'server' ? 'View Clients' : 'Details'}
                     </button>
                     <button class="btn btn-sm btn-primary" onclick="editInterface('${iface.id}')">
                         <i class="fas fa-edit"></i> Edit
                     </button>
                     <button class="btn btn-sm ${iface.enabled ? 'btn-warning' : 'btn-success'}" 
-                            onclick="toggleInterface('${iface.id}')">
+                            onclick="toggleInterface('${iface.id}')"
+                            ${iface.is_default ? 'disabled title="Default interface cannot be disabled"' : ''}>
                         <i class="fas fa-power-off"></i> ${iface.enabled ? 'Disable' : 'Enable'}
                     </button>
                     ${!iface.is_default ? `
@@ -322,6 +356,7 @@ function showCreateInterfaceModal() {
     $('#interface_id').prop('readonly', false);
     $('#interface_type').val('server');
     toggleInterfaceTypeFields();
+    $('#routing_section').show(); // Show routing section for new interfaces
     $('#interfaceModal').modal('show');
 }
 
@@ -355,6 +390,20 @@ function editInterface(id) {
     
     $('#private_key').val(iface.private_key);
     $('#enabled').prop('checked', iface.enabled);
+    
+    // Advanced routing configuration
+    $('#remote_networks').val(Array.isArray(iface.remote_networks) ? 
+        iface.remote_networks.join(',') : iface.remote_networks || '');
+    $('#allowed_interfaces').val(Array.isArray(iface.allowed_interfaces) ? 
+        iface.allowed_interfaces.join(',') : iface.allowed_interfaces || '');
+    $('#enable_snat').prop('checked', iface.enable_snat || false);
+    
+    // Hide routing section for default wg0 server interface
+    if (iface.id === 'wg0' && iface.type === 'server') {
+        $('#routing_section').hide();
+    } else {
+        $('#routing_section').show();
+    }
     
     toggleInterfaceTypeFields();
     $('#interfaceModal').modal('show');
@@ -410,6 +459,17 @@ function saveInterface() {
         data.peer_persistent_keepalive = parseInt($('#peer_keepalive').val()) || 0;
     }
 
+    // Advanced routing configuration
+    const remoteNetworksValue = $('#remote_networks').val().trim();
+    if (remoteNetworksValue) {
+        data.remote_networks = remoteNetworksValue.split(',').map(s => s.trim()).filter(s => s);
+    }
+    const allowedInterfacesValue = $('#allowed_interfaces').val().trim();
+    if (allowedInterfacesValue) {
+        data.allowed_interfaces = allowedInterfacesValue.split(',').map(s => s.trim()).filter(s => s);
+    }
+    data.enable_snat = $('#enable_snat').is(':checked');
+
     const method = editingInterfaceId ? 'PUT' : 'POST';
     const url = editingInterfaceId ? 
         `{{.basePath}}/api/interfaces/${editingInterfaceId}` : 
@@ -424,6 +484,8 @@ function saveInterface() {
             toastr.success('Interface saved successfully');
             $('#interfaceModal').modal('hide');
             loadInterfaces();
+            // Show the Apply Config button
+            $("#apply-config-button").show();
         },
         error: function(xhr) {
             toastr.error('Failed to save interface: ' + (xhr.responseJSON?.message || 'Unknown error'));
@@ -465,8 +527,85 @@ function deleteInterface(id) {
     });
 }
 
-function viewInterfaceDetails(id) {
-    window.location.href = `{{.basePath}}/?interface=${id}`;
+function viewInterfaceDetails(id, type) {
+    if (type === 'server') {
+        // Navigate to clients page (filtered by this interface)
+        window.location.href = `{{.basePath}}/?interface=${id}`;
+    } else {
+        // Show details modal for client-type interface
+        const iface = interfaces.find(i => i.id === id);
+        if (!iface) return;
+        
+        let html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>General Information</h5>
+                    <dl class="row">
+                        <dt class="col-sm-5">Interface ID:</dt>
+                        <dd class="col-sm-7"><code>${escapeHtml(iface.id)}</code></dd>
+                        
+                        <dt class="col-sm-5">Name:</dt>
+                        <dd class="col-sm-7">${escapeHtml(iface.name)}</dd>
+                        
+                        <dt class="col-sm-5">Type:</dt>
+                        <dd class="col-sm-7"><span class="badge badge-info">${escapeHtml(iface.type)}</span></dd>
+                        
+                        <dt class="col-sm-5">Status:</dt>
+                        <dd class="col-sm-7">${iface.enabled ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-secondary">Disabled</span>'}</dd>
+                        
+                        <dt class="col-sm-5">IP Addresses:</dt>
+                        <dd class="col-sm-7">${iface.interface_addresses ? iface.interface_addresses.join(', ') : 'None'}</dd>
+                        
+                        <dt class="col-sm-5">MTU:</dt>
+                        <dd class="col-sm-7">${iface.mtu || 'Default'}</dd>
+                        
+                        <dt class="col-sm-5">Table:</dt>
+                        <dd class="col-sm-7"><code>${iface.table || 'off'}</code></dd>
+                    </dl>
+                </div>
+                <div class="col-md-6">
+                    <h5>Peer Configuration</h5>
+                    <dl class="row">
+                        <dt class="col-sm-5">Endpoint:</dt>
+                        <dd class="col-sm-7"><code>${escapeHtml(iface.peer_endpoint || 'Not configured')}</code></dd>
+                        
+                        <dt class="col-sm-5">Public Key:</dt>
+                        <dd class="col-sm-7"><small><code>${escapeHtml(iface.peer_public_key || 'Not configured')}</code></small></dd>
+                        
+                        <dt class="col-sm-5">Allowed IPs:</dt>
+                        <dd class="col-sm-7">${iface.peer_allowed_ips ? iface.peer_allowed_ips.join(', ') : 'None'}</dd>
+                        
+                        <dt class="col-sm-5">Keepalive:</dt>
+                        <dd class="col-sm-7">${iface.peer_persistent_keepalive || 'Not set'}</dd>
+                    </dl>
+                </div>
+            </div>`;
+        
+        if (iface.remote_networks && iface.remote_networks.length > 0) {
+            html += `
+            <div class="row mt-3">
+                <div class="col-12">
+                    <h5>Advanced Routing</h5>
+                    <dl class="row">
+                        <dt class="col-sm-3">Remote Networks:</dt>
+                        <dd class="col-sm-9">${iface.remote_networks.join(', ')}</dd>
+                        
+                        ${iface.allowed_interfaces && iface.allowed_interfaces.length > 0 ? `
+                        <dt class="col-sm-3">Allowed Interfaces:</dt>
+                        <dd class="col-sm-9">${iface.allowed_interfaces.join(', ')}</dd>
+                        ` : ''}
+                        
+                        <dt class="col-sm-3">SNAT Enabled:</dt>
+                        <dd class="col-sm-9">${iface.enable_snat ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-secondary">No</span>'}</dd>
+                    </dl>
+                </div>
+            </div>`;
+        }
+        
+        $('#detailsModalTitle').text(`${iface.name} - Details`);
+        $('#detailsModalBody').html(html);
+        $('#interfaceDetailsModal').modal('show');
+    }
 }
 
 function escapeHtml(text) {
@@ -479,5 +618,34 @@ function escapeHtml(text) {
     };
     return text ? text.replace(/[&<>"']/g, m => map[m]) : '';
 }
+</script>
+
+<!-- Interface Details Modal -->
+<div class="modal fade" id="interfaceDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="detailsModalTitle">Interface Details</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="detailsModalBody">
+                <!-- Details will be populated here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "bottom_js"}}
+<script>
+    // Page-specific JavaScript for Interfaces
+    $(document).ready(function() {
+        loadInterfaces();
+    });
 </script>
 {{end}}

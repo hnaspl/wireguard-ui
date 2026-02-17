@@ -32,6 +32,7 @@ Firewall Rules Management
                         <table id="rules-table" class="table table-bordered table-striped">
                             <thead>
                                 <tr>
+                                    <th>Interface</th>
                                     <th>Client</th>
                                     <th>Allowed IP</th>
                                     <th>Port</th>
@@ -63,6 +64,12 @@ Firewall Rules Management
             </div>
             <form name="frm_new_rule" id="frm_new_rule">
                 <div class="modal-body">
+                    <div class="form-group">
+                        <label for="n_interface_id" class="control-label">Interface</label>
+                        <select id="n_interface_id" name="n_interface_id" class="form-control" required>
+                        </select>
+                        <small class="form-text text-muted">Rules will apply to traffic on this WireGuard interface</small>
+                    </div>
                     <div class="form-group">
                         <label for="n_client_id" class="control-label">Client</label>
                         <select id="n_client_id" name="n_client_id" class="form-control select2" required>
@@ -122,6 +129,12 @@ Firewall Rules Management
             <form name="frm_edit_rule" id="frm_edit_rule">
                 <div class="modal-body">
                     <input type="hidden" id="e_rule_id" name="e_rule_id">
+                    <div class="form-group">
+                        <label for="e_interface_id" class="control-label">Interface</label>
+                        <select id="e_interface_id" name="e_interface_id" class="form-control" required>
+                        </select>
+                        <small class="form-text text-muted">Rules will apply to traffic on this WireGuard interface</small>
+                    </div>
                     <div class="form-group">
                         <label for="e_client_id" class="control-label">Client</label>
                         <select id="e_client_id" name="e_client_id" class="form-control select2" required>
@@ -186,11 +199,98 @@ Firewall Rules Management
     </div>
 </div>
 
+<!-- Modal for first-rule web/DNS access -->
+<div class="modal fade" id="modal_first_rule_access">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h4 class="modal-title">First Firewall Rule - Grant Baseline Access?</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="icon fas fa-exclamation-triangle"></i>
+                    <strong>Important:</strong> This is the first firewall rule for this client. 
+                    The client will lose unrestricted access and will only be able to access what's explicitly allowed in firewall rules.
+                </div>
+                <p>Would you like to grant baseline web and DNS access to this client?</p>
+                <div class="form-group">
+                    <div class="icheck-primary">
+                        <input type="checkbox" id="first_rule_allow_web" checked>
+                        <label for="first_rule_allow_web">
+                            <strong>Allow Web Access (HTTP/HTTPS)</strong><br>
+                            <small class="text-muted">Grant access to ports 80 and 443 for all destinations, regardless of firewall rules</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="icheck-primary">
+                        <input type="checkbox" id="first_rule_allow_dns" checked>
+                        <label for="first_rule_allow_dns">
+                            <strong>Allow DNS Access</strong><br>
+                            <small class="text-muted">Grant access to port 53 (UDP/TCP) for all destinations, regardless of firewall rules</small>
+                        </label>
+                    </div>
+                </div>
+                <p class="text-muted"><small><i class="fas fa-info-circle"></i> You can change these settings later in the client edit modal.</small></p>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="button" id="btn_first_rule_save" class="btn btn-primary">Save with these settings</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {{end}}
 
 {{define "bottom_js"}}
 <script>
     let deleteRuleId = '';
+    let pendingRuleData = null;
+
+    function loadInterfaces() {
+        $.ajax({
+            cache: false,
+            method: 'GET',
+            url: '{{.basePath}}/api/interfaces',
+            dataType: 'json',
+            contentType: "application/json",
+            success: function (data) {
+                $('#n_interface_id option').remove();
+                $('#e_interface_id option').remove();
+                
+                // Filter: only show server-type interfaces (client-type interfaces don't use firewall rules)
+                const serverInterfaces = data.filter(function(iface) {
+                    return iface.enabled && iface.type === 'server';
+                });
+                
+                // Sort interfaces: wg0 first, then others alphabetically
+                serverInterfaces.sort(function(a, b) {
+                    if (a.id === 'wg0') return -1;
+                    if (b.id === 'wg0') return 1;
+                    return a.id.localeCompare(b.id);
+                });
+                
+                $.each(serverInterfaces, function(index, iface) {
+                    const label = iface.name + ' (' + iface.id + ')';
+                    $('#n_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
+                    $('#e_interface_id').append($("<option></option>").attr("value", iface.id).text(label));
+                });
+                
+                if (serverInterfaces.length === 0) {
+                    $('#n_interface_id').append($("<option></option>").attr("value", "").text("No server interfaces available"));
+                    $('#e_interface_id').append($("<option></option>").attr("value", "").text("No server interfaces available"));
+                }
+            },
+            error: function (jqXHR, exception) {
+                const responseJson = jQuery.parseJSON(jqXHR.responseText);
+                toastr.error(responseJson['message']);
+            }
+        });
+    }
 
     function loadClients() {
         $.ajax({
@@ -236,7 +336,7 @@ Firewall Rules Management
     function renderFirewallRules(rules) {
         $('#rules-tbody').empty();
         if (!rules || rules.length === 0) {
-            $('#rules-tbody').append('<tr><td colspan="7" class="text-center">No firewall rules configured</td></tr>');
+            $('#rules-tbody').append('<tr><td colspan="8" class="text-center">No firewall rules configured</td></tr>');
             return;
         }
         
@@ -246,6 +346,7 @@ Firewall Rules Management
                 '<span class="badge badge-secondary">Disabled</span>';
             
             const row = `<tr>
+                <td><span class="badge badge-primary">${rule.interface_id || 'wg0'}</span></td>
                 <td>${rule.client_name || rule.client_id}</td>
                 <td>${rule.allowed_ip}</td>
                 <td>${rule.allowed_port}</td>
@@ -274,6 +375,7 @@ Firewall Rules Management
             contentType: "application/json",
             success: function (rule) {
                 $('#e_rule_id').val(rule.id);
+                $('#e_interface_id').val(rule.interface_id || 'wg0');
                 $('#e_client_id').val(rule.client_id);
                 $('#e_allowed_ip').val(rule.allowed_ip);
                 $('#e_allowed_port').val(rule.allowed_port);
@@ -295,6 +397,7 @@ Firewall Rules Management
     }
 
     $(document).ready(function() {
+        loadInterfaces();
         loadClients();
         loadFirewallRules();
 
@@ -302,6 +405,7 @@ Firewall Rules Management
         $('#frm_new_rule').on('submit', function(e) {
             e.preventDefault();
             const data = {
+                interface_id: $('#n_interface_id').val(),
                 client_id: $('#n_client_id').val(),
                 allowed_ip: $('#n_allowed_ip').val(),
                 allowed_port: $('#n_allowed_port').val(),
@@ -310,6 +414,58 @@ Firewall Rules Management
                 enabled: $('#n_enabled').is(':checked')
             };
 
+            // Check if this client already has firewall rules
+            $.ajax({
+                cache: false,
+                method: 'GET',
+                url: '{{.basePath}}/api/firewall-rules',
+                dataType: 'json',
+                contentType: "application/json",
+                success: function(rules) {
+                    // Check if client has any existing rules (handle null/undefined)
+                    if (rules && rules.length > 0) {
+                        const clientRules = rules.filter(r => r.client_id === data.client_id);
+                        
+                        if (clientRules.length === 0) {
+                            // This is the first rule for this client - show modal
+                            pendingRuleData = data;
+                            $('#modal_new_rule').modal('hide');
+                            $('#modal_first_rule_access').modal('show');
+                        } else {
+                            // Client already has rules - save directly
+                            saveFirewallRule(data);
+                        }
+                    } else {
+                        // No rules exist - this is the first rule
+                        pendingRuleData = data;
+                        $('#modal_new_rule').modal('hide');
+                        $('#modal_first_rule_access').modal('show');
+                    }
+                },
+                error: function() {
+                    // If can't check, just save directly
+                    saveFirewallRule(data);
+                }
+            });
+        });
+
+        // First rule save button
+        $('#btn_first_rule_save').on('click', function() {
+            if (!pendingRuleData) return;
+            
+            const allowWeb = $('#first_rule_allow_web').is(':checked');
+            const allowDNS = $('#first_rule_allow_dns').is(':checked');
+            
+            // Add web/DNS access settings to the rule data
+            pendingRuleData.allow_web_access = allowWeb;
+            pendingRuleData.allow_dns_access = allowDNS;
+            
+            $('#modal_first_rule_access').modal('hide');
+            saveFirewallRule(pendingRuleData);
+            pendingRuleData = null;
+        });
+
+        function saveFirewallRule(data) {
             $.ajax({
                 cache: false,
                 method: 'POST',
@@ -318,23 +474,25 @@ Firewall Rules Management
                 contentType: "application/json",
                 data: JSON.stringify(data),
                 success: function(response) {
-                    $('#modal_new_rule').modal('hide');
                     $('#frm_new_rule')[0].reset();
                     toastr.success('Firewall rule added successfully');
                     loadFirewallRules();
+                    // Show the Apply Config button
+                    $("#apply-config-button").show();
                 },
                 error: function(jqXHR, exception) {
                     const responseJson = jQuery.parseJSON(jqXHR.responseText);
                     toastr.error(responseJson['message']);
                 }
             });
-        });
+        }
 
         // Edit rule form submit
         $('#frm_edit_rule').on('submit', function(e) {
             e.preventDefault();
             const data = {
                 id: $('#e_rule_id').val(),
+                interface_id: $('#e_interface_id').val(),
                 client_id: $('#e_client_id').val(),
                 allowed_ip: $('#e_allowed_ip').val(),
                 allowed_port: $('#e_allowed_port').val(),
@@ -354,6 +512,8 @@ Firewall Rules Management
                     $('#modal_edit_rule').modal('hide');
                     toastr.success('Firewall rule updated successfully');
                     loadFirewallRules();
+                    // Show the Apply Config button
+                    $("#apply-config-button").show();
                 },
                 error: function(jqXHR, exception) {
                     const responseJson = jQuery.parseJSON(jqXHR.responseText);
@@ -374,6 +534,8 @@ Firewall Rules Management
                     $('#modal_delete_rule').modal('hide');
                     toastr.success('Firewall rule deleted successfully');
                     loadFirewallRules();
+                    // Show the Apply Config button
+                    $("#apply-config-button").show();
                 },
                 error: function(jqXHR, exception) {
                     const responseJson = jQuery.parseJSON(jqXHR.responseText);

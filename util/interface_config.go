@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/labstack/gommon/log"
 	"github.com/ngoduykhanh/wireguard-ui/model"
@@ -69,7 +71,36 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 		return err
 	}
 
+	// Determine script paths for this interface
+	// Note: configDir is already declared on line 21
+	configDir = filepath.Dir(iface.ConfigFilePath)
+	if configDir == "" || configDir == "." {
+		configDir = "/etc/wireguard"
+	}
+	
+	// For wg0 (default interface), use standard postup.sh/postdown.sh names
+	// For other interfaces, use interface-specific names
+	var postUpPath, postDownPath string
+	if iface.ID == "wg0" || iface.IsDefault {
+		// Use default/global script names for wg0 to avoid confusion
+		if globalSettings.PostUpScriptPath != "" {
+			postUpPath = globalSettings.PostUpScriptPath
+		} else {
+			postUpPath = filepath.Join(configDir, "postup.sh")
+		}
+		if globalSettings.PostDownScriptPath != "" {
+			postDownPath = globalSettings.PostDownScriptPath
+		} else {
+			postDownPath = filepath.Join(configDir, "postdown.sh")
+		}
+	} else {
+		// Use interface-specific script names for non-default interfaces
+		postUpPath = filepath.Join(configDir, iface.ID+"-postup.sh")
+		postDownPath = filepath.Join(configDir, iface.ID+"-postdown.sh")
+	}
+
 	// Build server config from interface for template compatibility
+	// PostUp/PostDown are file paths (not script content) - they're written to WireGuard config
 	serverConfig := model.Server{
 		KeyPair: &model.ServerKeypair{
 			PrivateKey: iface.PrivateKey,
@@ -78,8 +109,8 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 		Interface: &model.ServerInterface{
 			Addresses:  iface.InterfaceAddresses,
 			ListenPort: iface.ListenPort,
-			PostUp:     iface.PostUpScript,
-			PostDown:   iface.PostDownScript,
+			PostUp:     postUpPath,
+			PostDown:   postDownPath,
 		},
 	}
 
@@ -88,6 +119,7 @@ func WriteInterfaceConfig(tmplDir fs.FS, iface model.WgInterface, clients []mode
 		"clientDataList": escapedClientDataList,
 		"globalSettings": globalSettings,
 		"usersList":      users,
+		"interface":      iface, // Pass interface object for Table directive
 	}
 
 	err = t.Execute(f, config)
@@ -131,16 +163,21 @@ func writeClientInterfaceConfig(f *os.File, iface model.WgInterface) error {
 		config.WriteString(fmt.Sprintf("MTU = %d\n", iface.MTU))
 	}
 	
-	// PostUp/PostDown if configured
-	if iface.PostUpScript != "" {
-		postUpPath := filepath.Dir(iface.ConfigFilePath) + "/" + iface.ID + "-postup.sh"
-		config.WriteString("PostUp = " + postUpPath + "\n")
+	// Table directive for client interfaces
+	if iface.Table != "" {
+		config.WriteString("Table = " + iface.Table + "\n")
 	}
 	
-	if iface.PostDownScript != "" {
-		postDownPath := filepath.Dir(iface.ConfigFilePath) + "/" + iface.ID + "-postdown.sh"
-		config.WriteString("PostDown = " + postDownPath + "\n")
+	// PostUp/PostDown - always add for client interfaces to support inter-interface routing
+	configDir := filepath.Dir(iface.ConfigFilePath)
+	if configDir == "" || configDir == "." {
+		configDir = "/etc/wireguard"
 	}
+	postUpPath := filepath.Join(configDir, iface.ID+"-postup.sh")
+	postDownPath := filepath.Join(configDir, iface.ID+"-postdown.sh")
+	
+	config.WriteString("PostUp = " + postUpPath + "\n")
+	config.WriteString("PostDown = " + postDownPath + "\n")
 	
 	// Peer section
 	config.WriteString("\n[Peer]\n")
@@ -167,35 +204,50 @@ func writeClientInterfaceConfig(f *os.File, iface model.WgInterface) error {
 }
 
 // GenerateAndSaveInterfaceScripts generates and saves PostUp/PostDown scripts for a specific interface
-func GenerateAndSaveInterfaceScripts(interfaceID string, iface model.WgInterface, 
+func GenerateAndSaveInterfaceScripts(db store.IStore, interfaceID string, iface model.WgInterface, 
 	globalSettings model.GlobalSetting, firewallRules []model.FirewallRule, clients []model.ClientData) error {
 	
 	// Calculate WG_SUBNETS from interface addresses
 	wgSubnets := strings.Join(iface.InterfaceAddresses, ",")
 
-	// Generate PostUp script
-	postUpScript := GeneratePostUpScript(globalSettings, wgSubnets, firewallRules, clients, interfaceID)
-	
-	// Generate PostDown script
-	postDownScript := GeneratePostDownScript(globalSettings, wgSubnets, firewallRules, clients, interfaceID)
+	// Get all interfaces for inter-interface routing
+	allInterfaces, err := db.GetInterfaces()
+	if err != nil {
+		log.Warnf("Cannot get all interfaces for routing config: %v", err)
+		allInterfaces = []model.WgInterface{}
+	}
 
-	// Determine script paths - use interface-specific paths
+	// Generate PostUp script with routing support
+	postUpScript := GeneratePostUpScriptWithRouting(globalSettings, wgSubnets, firewallRules, clients, interfaceID, &iface, allInterfaces)
+	
+	// Generate PostDown script with routing support
+	postDownScript := GeneratePostDownScriptWithRouting(globalSettings, wgSubnets, firewallRules, clients, interfaceID, &iface, allInterfaces)
+
+	// Determine script paths - use interface-specific paths for non-default interfaces
 	configDir := filepath.Dir(iface.ConfigFilePath)
 	if configDir == "" || configDir == "." {
 		configDir = "/etc/wireguard"
 	}
 
-	postUpPath := filepath.Join(configDir, interfaceID+"-postup.sh")
-	postDownPath := filepath.Join(configDir, interfaceID+"-postdown.sh")
-
-	// If global settings specify custom paths and this is the default interface, use those
-	if iface.IsDefault {
+	// For wg0 (default interface), use standard postup.sh/postdown.sh names
+	// For other interfaces, use interface-specific names
+	var postUpPath, postDownPath string
+	if interfaceID == "wg0" || iface.IsDefault {
+		// Use default/global script names for wg0 to avoid confusion with existing setup
 		if globalSettings.PostUpScriptPath != "" {
 			postUpPath = globalSettings.PostUpScriptPath
+		} else {
+			postUpPath = filepath.Join(configDir, "postup.sh")
 		}
 		if globalSettings.PostDownScriptPath != "" {
 			postDownPath = globalSettings.PostDownScriptPath
+		} else {
+			postDownPath = filepath.Join(configDir, "postdown.sh")
 		}
+	} else {
+		// Use interface-specific script names for non-default interfaces
+		postUpPath = filepath.Join(configDir, interfaceID+"-postup.sh")
+		postDownPath = filepath.Join(configDir, interfaceID+"-postdown.sh")
 	}
 
 	// Write PostUp script
@@ -252,10 +304,94 @@ func ApplyInterfaceConfig(db store.IStore, tmplDir fs.FS, interfaceID string) er
 	}
 
 	// Generate and save scripts
-	if err := GenerateAndSaveInterfaceScripts(interfaceID, iface, settings, firewallRules, clients); err != nil {
+	log.Infof("Generating scripts for interface %s: RemoteNetworks=%v, AllowedInterfaces=%v, EnableSNAT=%v", 
+		interfaceID, iface.RemoteNetworks, iface.AllowedInterfaces, iface.EnableSNAT)
+	if err := GenerateAndSaveInterfaceScripts(db, interfaceID, iface, settings, firewallRules, clients); err != nil {
 		return fmt.Errorf("cannot generate scripts for interface %s: %v", interfaceID, err)
 	}
 
+	// If interface is enabled and currently running, restart it to apply changes
+	// This ensures PostUp/PostDown scripts are executed
+	if iface.Enabled {
+		// Check if interface is currently running
+		checkCmd := exec.Command("wg", "show", iface.ID)
+		if checkCmd.Run() == nil {
+			// Interface is running, restart it
+			log.Infof("Interface %s is running, restarting to apply new config and scripts", iface.ID)
+			if err := RestartInterface(iface.ID); err != nil {
+				log.Warnf("Failed to restart interface %s: %v (scripts generated but not applied yet)", iface.ID, err)
+			}
+		} else {
+			log.Infof("Interface %s is not running. Scripts generated. Start interface to apply.", iface.ID)
+		}
+	} else {
+		log.Infof("Interface %s is disabled. Config and scripts generated but not applied.", iface.ID)
+	}
+
+	return nil
+}
+
+// RestartInterface restarts a WireGuard interface
+func RestartInterface(interfaceID string) error {
+	confPath := filepath.Join("/etc/wireguard", interfaceID+".conf")
+	
+	// Check if config file exists
+	if _, err := os.Stat(confPath); os.IsNotExist(err) {
+		return fmt.Errorf("config file does not exist: %s", confPath)
+	}
+	
+	// Check if interface is currently running
+	checkCmd := exec.Command("wg", "show", interfaceID)
+	isRunning := checkCmd.Run() == nil
+	
+	if isRunning {
+		// Stop the interface
+		log.Infof("Stopping interface %s", interfaceID)
+		stopCmd := exec.Command("wg-quick", "down", confPath)
+		stopCmd.Stdout = os.Stdout
+		stopCmd.Stderr = os.Stderr
+		if err := stopCmd.Run(); err != nil {
+			log.Warnf("Error stopping interface %s: %v", interfaceID, err)
+		}
+		
+		// Give it more time to fully stop and release resources
+		time.Sleep(1 * time.Second)
+		
+		// Verify interface is down with retries
+		stillExists := false
+		for i := 0; i < 3; i++ {
+			checkCmd = exec.Command("wg", "show", interfaceID)
+			if checkCmd.Run() != nil {
+				// Interface is down
+				stillExists = false
+				break
+			}
+			// Still exists, wait a bit more
+			stillExists = true
+			time.Sleep(500 * time.Millisecond)
+		}
+		
+		// If still exists after multiple checks, force remove it
+		if stillExists {
+			log.Warnf("Interface %s still exists after stop, forcing down", interfaceID)
+			forceCmd := exec.Command("ip", "link", "delete", interfaceID)
+			if err := forceCmd.Run(); err != nil {
+				log.Warnf("Failed to force delete interface %s: %v", interfaceID, err)
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	
+	// Start the interface
+	log.Infof("Starting interface %s", interfaceID)
+	startCmd := exec.Command("wg-quick", "up", confPath)
+	startCmd.Stdout = os.Stdout
+	startCmd.Stderr = os.Stderr
+	if err := startCmd.Run(); err != nil {
+		return fmt.Errorf("failed to start interface: %v", err)
+	}
+	
+	log.Infof("Successfully restarted interface %s", interfaceID)
 	return nil
 }
 
